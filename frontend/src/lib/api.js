@@ -1,47 +1,32 @@
-// ── API Client ────────────────────────────────────────────────────────────────
 const BASE = '/api';
-
 function getToken() { return localStorage.getItem('nexus_token'); }
 export function setToken(t) { localStorage.setItem('nexus_token', t); }
 export function clearToken() { localStorage.removeItem('nexus_token'); }
 
-async function request(method, path, body) {
-  const headers = { 'Content-Type': 'application/json' };
+async function req(method, path, body) {
+  const headers = { 'Content-Type':'application/json' };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
+  const res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
 
 export const api = {
-  // Auth
-  register:    (body) => request('POST', '/auth/register', body),
-  login:       (body) => request('POST', '/auth/login', body),
-  me:          ()     => request('GET',  '/auth/me'),
-  profile:     (body) => request('PUT',  '/auth/profile', body),
-
-  // Bot
-  botState:    ()     => request('GET',  '/bot/state'),
-  botStart:    ()     => request('POST', '/bot/start'),
-  botStop:     ()     => request('POST', '/bot/stop'),
-  botReset:    ()     => request('POST', '/bot/reset'),
-  botSettings: (body) => request('PUT',  '/bot/settings', body),
-
-  // Exchanges
-  exchanges:   ()               => request('GET',    '/exchanges'),
-  connectEx:   (body)           => request('POST',   '/exchanges/connect', body),
-  disconnectEx:(exchange)       => request('DELETE', `/exchanges/${exchange}`),
-
-  // Billing
-  billingStatus:   ()   => request('GET',  '/billing/status'),
-  billingCheckout: ()   => request('POST', '/billing/checkout'),
-  billingPortal:   ()   => request('POST', '/billing/portal'),
+  register:       b => req('POST', '/auth/register', b),
+  login:          b => req('POST', '/auth/login', b),
+  me:             ()=> req('GET',  '/auth/me'),
+  botState:       ()=> req('GET',  '/bot/state'),
+  botStart:       ()=> req('POST', '/bot/start'),
+  botStop:        ()=> req('POST', '/bot/stop'),
+  botReset:       ()=> req('POST', '/bot/reset'),
+  botSettings:    b => req('PUT',  '/bot/settings', b),
+  strategies:     ()=> req('GET',  '/bot/strategies'),
+  exchanges:      ()=> req('GET',  '/exchanges'),
+  connectEx:      b => req('POST', '/exchanges/connect', b),
+  disconnectEx:   ex=> req('DELETE',`/exchanges/${ex}`),
+  billingStatus:  ()=> req('GET',  '/billing/status'),
+  billingCheckout:()=> req('POST', '/billing/checkout'),
+  billingPortal:  ()=> req('POST', '/billing/portal'),
 };
