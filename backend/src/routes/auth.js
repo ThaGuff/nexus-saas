@@ -23,10 +23,10 @@ router.post('/register', async (req, res) => {
     const { email, password, firstName, lastName } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    if (Users.findByEmail(email)) return res.status(409).json({ error: 'Email already registered' });
+    if (await Users.findByEmail(email)) return res.status(409).json({ error: 'Email already registered' });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = Users.create({ id: uuid(), email, passwordHash, firstName, lastName });
+    const user = await Users.create({ id: uuid(), email, passwordHash, firstName, lastName });
     const token = makeToken(user.id);
 
     res.status(201).json({ token, user: Users.safePublic(user) });
@@ -40,7 +40,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = Users.findByEmail(email);
+    const user = await Users.findByEmail(email);
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -74,7 +74,7 @@ router.put('/profile', requireAuth, async (req, res) => {
       updates.passwordHash = await bcrypt.hash(newPassword, 12);
     }
 
-    const updated = Users.update(req.user.id, updates);
+    const updated = await Users.update(req.user.id, updates);
     res.json({ user: Users.safePublic(updated) });
   } catch (e) {
     res.status(500).json({ error: 'Profile update failed' });

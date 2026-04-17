@@ -1,19 +1,17 @@
 /**
- * NEXUS SAAS · WebSocket Server
- * Per-user real-time updates
+ * NEXUS SAAS · WebSocket Server v2
+ * Per-user real-time — sends full state on connect
  */
-
 import { WebSocketServer, WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { Users } from '../models/db.js';
-import { getUserPrices } from '../services/botManager.js';
+import { getBotState, getUserPrices, getStrategyList } from '../services/botManager.js';
 
-// userId -> Set of WebSocket connections
 const userSockets = new Map();
 
 export function broadcastToUser(userId, data) {
   const sockets = userSockets.get(userId);
-  if (!sockets) return;
+  if (!sockets?.size) return;
   const msg = JSON.stringify(data);
   for (const ws of sockets) {
     if (ws.readyState === WebSocket.OPEN) {
@@ -25,47 +23,35 @@ export function broadcastToUser(userId, data) {
 export function setupWebSocket(server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
-  wss.on('connection', (ws, req) => {
-    // Extract token from query string
-    const url    = new URL(req.url, 'http://localhost');
-    const token  = url.searchParams.get('token');
+  wss.on('connection', async (ws, req) => {
+    const url   = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token');
+    let userId  = null;
 
-    let userId = null;
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-      userId = payload.userId;
+      const p = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+      userId = p.userId;
     } catch {
       ws.close(1008, 'Unauthorized');
       return;
     }
 
-    const user = Users.findById(userId);
-    if (!user) { ws.close(1008, 'User not found'); return; }
-
-    // Register socket
     if (!userSockets.has(userId)) userSockets.set(userId, new Set());
     userSockets.get(userId).add(ws);
 
-    // Send initial state
-    const prices = getUserPrices(userId);
-    ws.send(JSON.stringify({
-      type:   'INIT',
-      state:  user.botState,
-      prices,
-      botLog: user.botLog || [],
-      user:   Users.safePublic(user),
-    }));
+    // Send full state on connect
+    try {
+      const { state, prices, botLog } = await getBotState(userId);
+      ws.send(JSON.stringify({
+        type: 'INIT', state, prices, botLog,
+        strategies: getStrategyList(),
+      }));
+    } catch {}
 
     ws.on('close', () => {
-      const sockets = userSockets.get(userId);
-      if (sockets) { sockets.delete(ws); if (sockets.size === 0) userSockets.delete(userId); }
+      const s = userSockets.get(userId);
+      if (s) { s.delete(ws); if (!s.size) userSockets.delete(userId); }
     });
-
-    ws.on('error', () => {
-      const sockets = userSockets.get(userId);
-      if (sockets) sockets.delete(ws);
-    });
+    ws.on('error', () => { const s=userSockets.get(userId); if(s)s.delete(ws); });
   });
-
-  return wss;
 }
