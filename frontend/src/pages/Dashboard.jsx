@@ -252,13 +252,15 @@ export default function Dashboard(){
   const [exForm,setExForm]=useState({exchange:'coinbase',apiKey:'',apiSecret:'',apiPassphrase:'',label:'',mode:'PAPER'});
   const [exErr,setExErr]=useState('');
   const [exLoading,setExLoading]=useState(false);
+  const [initError,setInitError]=useState(null);
   const logRef=useRef(null);
 
-  useEffect(()=>{if(!user){nav('/login');return;}api.exchanges().then(d=>setExchanges(d.exchanges||[])).catch(()=>{});if(strategies.length===0)api.strategies().catch(()=>{});},[user]);
+  useEffect(()=>{if(!user){nav('/login');return;}api.exchanges().then(d=>setExchanges(d.exchanges||[])).catch(()=>{});api.strategies().then(d=>{}).catch(()=>{});},[user]);
   useEffect(()=>{if(!selectedBot&&bots.length>0)setSelectedBot(bots[0].id);},[bots]);
-  useEffect(()=>{const el=logRef.current;if(el)el.scrollTop=el.scrollHeight;},[selectedBotData?.logs?.length]);
 
-  const selectedBotData=bots.find(b=>b.id===selectedBot)||bots[0];
+  const selectedBotData=bots.find(b=>b.id===selectedBot)||bots[0]||null;
+  const logCount=selectedBotData?.logs?.length||0;
+  useEffect(()=>{const el=logRef.current;if(el)el.scrollTop=el.scrollHeight;},[logCount]);
   const totalPortfolioValue=bots.reduce((s,b)=>s+(b.totalValue||b.balance||0),0);
   const totalPnl=bots.reduce((s,b)=>s+(b.pnl||0),0);
   const runningCount=bots.filter(b=>['running','cycling'].includes(b.status)).length;
@@ -282,7 +284,24 @@ export default function Dashboard(){
 
   const disconnectExchange=async(id)=>{if(!confirm('Disconnect this exchange?'))return;await api.disconnectEx(id);const d=await api.exchanges();setExchanges(d.exchanges||[]);};
 
-  if(!user) return null;
+  // Loading screen — never shows black
+  if(!user) return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:T.bg,flexDirection:'column',gap:16}}>
+      <div style={{color:T.g,fontSize:20,fontWeight:800,letterSpacing:'-0.02em'}}>NEXUS</div>
+      <div style={{color:T.mu,fontSize:12}}>Loading your dashboard...</div>
+      <div style={{width:120,height:2,background:'#ffffff0a',borderRadius:1,overflow:'hidden'}}><div style={{width:'60%',height:'100%',background:T.g,animation:'slide 1.2s ease-in-out infinite'}}/></div>
+      <style>{`@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}`}</style>
+    </div>
+  );
+
+  // Graceful error display if backend fails
+  if(initError) return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:T.bg,flexDirection:'column',gap:16,padding:24}}>
+      <div style={{color:T.r,fontSize:16,fontWeight:700}}>Dashboard Error</div>
+      <div style={{color:T.mu,fontSize:13,textAlign:'center',maxWidth:400}}>{initError}</div>
+      <button onClick={()=>{setInitError(null);window.location.reload();}} style={{background:T.g,color:'#000',border:'none',borderRadius:8,padding:'10px 20px',fontWeight:700,cursor:'pointer'}}>Reload</button>
+    </div>
+  );
 
   const TABS=isMobile?['bots','log','market','exchanges']:['bots','live log','market','exchanges','analytics'];
 
