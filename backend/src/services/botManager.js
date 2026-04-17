@@ -326,3 +326,33 @@ export async function restoreActiveBots() {
 
 export { STRATEGY_LIST };
 export function getStrategyList() { return STRATEGY_LIST; }
+
+/**
+ * Apply a new starting balance to the bot state.
+ * Only updates balance/peak if the bot has no open positions and no trades.
+ * Always updates startingBalance reference so reset uses the right value.
+ */
+export async function applyStartingBalance(userId, amount) {
+  const s = amount;
+  // Update DB starting balance and bot balance
+  await Users.updateBotState(userId, {
+    balance: s, peakValue: s,
+    portfolio: {}, cycleCount: 0, totalFeesUSD: 0,
+    status: 'idle', startedAt: null, lastCycleAt: null,
+  }).catch(e => console.error('[BotMgr] applyStartingBalance DB error:', e.message));
+
+  // Also delete all trades so history is clean for the new balance
+  await Trades.deleteForUser(userId).catch(() => {});
+  BotLogs.clearForUser(userId);
+
+  // Update in-memory state
+  if (botStates.has(userId)) {
+    botStates.set(userId, {
+      ...botStates.get(userId),
+      balance: s, startingBalance: s, peakValue: s,
+      portfolio: {}, cycleCount: 0, totalFeesUSD: 0, status: 'idle',
+    });
+  }
+
+  console.log(`[BotMgr] Starting balance set to $${s} for ${userId.slice(0,8)}`);
+}

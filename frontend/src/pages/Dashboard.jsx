@@ -216,8 +216,9 @@ export default function Dashboard(){
   const trades=bs.trades||[];
   let tv=bs.balance||0;
   for(const[s,p]of Object.entries(port))tv+=(p.qty||0)*(prices[s]?.price||0);
-  const pnl=tv-(bs.startingBalance||100);
-  const pnlPct=(pnl/(bs.startingBalance||100))*100;
+  const startBal=user.startingBalance||bs.startingBalance||100;
+  const pnl=tv-startBal;
+  const pnlPct=(pnl/startBal)*100;
   const dd=bs.peakValue>0?((bs.peakValue-tv)/bs.peakValue*100):0;
   const sells=trades.filter(t=>t.type==='SELL');
   const wins=sells.filter(t=>t.pnl>0).length;
@@ -300,7 +301,7 @@ export default function Dashboard(){
       {!isMobile&&(
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:T.b}}>
           {[
-            {label:'PORTFOLIO',value:fUSD(tv),sub:`started ${fUSD(bs.startingBalance)}`,color:pnl>=0?T.g:T.r,accent:pnl>0},
+            {label:'PORTFOLIO',value:fUSD(tv),sub:`started ${fUSD(user.startingBalance||bs.startingBalance)}`,color:pnl>=0?T.g:T.r,accent:pnl>0},
             {label:'CASH',value:fUSD(bs.balance),sub:`${tv>0?((bs.balance/tv)*100).toFixed(0):0}% liquid`},
             {label:'ALL-TIME P&L',value:`${pnl>=0?'+':''}${fUSD(pnl)}`,sub:fPct(pnlPct),color:pnl>=0?T.g:T.r},
             {label:'WIN RATE',value:wr,sub:`${wins}W / ${sells.length-wins}L`,color:parseInt(wr)>=60?T.g:T.r},
@@ -342,7 +343,7 @@ export default function Dashboard(){
                         <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={pnl>=0?T.g:T.r} stopOpacity={0.2}/><stop offset="95%" stopColor={pnl>=0?T.g:T.r} stopOpacity={0}/></linearGradient></defs>
                         <XAxis dataKey="i" hide/><YAxis domain={['auto','auto']} hide/>
                         <Tooltip contentStyle={{background:T.card2,border:`1px solid ${T.b2}`,borderRadius:8,fontSize:11,color:T.tx}} formatter={v=>[fUSD(v),'Value']}/>
-                        <ReferenceLine y={bs.startingBalance} stroke={T.su} strokeDasharray="4 4"/>
+                        <ReferenceLine y={user.startingBalance||bs.startingBalance} stroke={T.su} strokeDasharray="4 4"/>
                         <Area type="monotone" dataKey="v" stroke={pnl>=0?T.g:T.r} strokeWidth={2} fill="url(#g)"/>
                       </AreaChart>
                     </ResponsiveContainer>}
