@@ -5,7 +5,7 @@
 import jwt from 'jsonwebtoken';
 import { Users } from '../models/db.js';
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' });
