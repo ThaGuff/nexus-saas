@@ -10,7 +10,8 @@
 import axios from 'axios';
 import {
   fetchPrices, seedPriceHistory, scoreForBuy, evaluateExit,
-  calcTotalValue, buildMarketSummary, COINS, STRATEGY_LIST
+  calcTotalValue, buildMarketSummary, COINS, STRATEGY_LIST,
+  setCooldown, isOnCooldown
 } from './algorithm.js';
 import { Users, Bots, Trades, BotLogs, Exchanges } from '../models/db.js';
 import { broadcastToUser } from '../routes/ws.js';
@@ -225,7 +226,7 @@ async function runBotCycle(botId, userId) {
     const scored = [];
     for (const { symbol } of COINS) {
       try {
-        const result = scoreForBuy(botId, symbol, prices, currentPortfolio, tv, settings); // botId key
+        const result = scoreForBuy(botId, symbol, prices, currentPortfolio, tv, settings, cycleNum); // botId key
         ulog(botId, userId, `  ${symbol}: score=${result.score.toFixed(1)} min=${result.minScore} signals=${result.signals?.slice(0,2).join(',')||'none'}`, 'INFO');
         if (result.score >= result.minScore) {
           scored.push({ symbol, ...result });
@@ -294,6 +295,7 @@ async function runBotCycle(botId, userId) {
               source: GEMINI_KEY ? 'AI' : 'RULES',
             };
             await Trades.insert(userId, t, botId).catch(e => ulog(botId, userId, `Trade insert error: ${e.message}`, 'ERROR'));
+            setCooldown(botId, best.symbol, cycleNum); // prevent re-buying same coin for 5 cycles
             setMem(botId, { balance: newBal, portfolio: newPort, peakValue, totalFees: (botMem.get(botId)?.totalFees || 0) + fee });
             ulog(botId, userId, `✅ BUY ${qty.toFixed(5)} ${best.symbol} @ $${px.toFixed(4)} | Spent $${spend.toFixed(2)} | Fee $${fee.toFixed(3)} | [${bot.name}]`, 'TRADE');
           } else {
