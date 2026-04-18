@@ -5,7 +5,7 @@
  */
 
 import axios from 'axios';
-import { fetchPrices, scoreForBuy, evaluateExit, calcTotalValue, buildMarketSummary, COINS, STRATEGY_LIST } from './algorithm.js';
+import { fetchPrices, seedPriceHistory, scoreForBuy, evaluateExit, calcTotalValue, buildMarketSummary, COINS, STRATEGY_LIST } from './algorithm.js';
 import { Users, Bots, Trades, BotLogs, Exchanges } from '../models/db.js';
 import { broadcastToUser } from '../routes/ws.js';
 
@@ -66,8 +66,20 @@ async function callGemini(prompt) {
 }
 
 async function runBotCycle(botId, userId) {
-  const bot = await Bots.findById(botId).catch(()=>null);
-  if (!bot?.enabled) return;
+  let bot = await Bots.findById(botId).catch(()=>null);
+  // If bots table doesn't exist, use in-memory state only
+  if (!bot && !botMem.has(botId)) return;
+  // If bot was found but disabled, skip
+  if (bot && !bot.enabled) return;
+  // Synthetic bot from memory if table missing
+  if (!bot) {
+    const ms = botMem.get(botId);
+    bot = { enabled:true, name:'Bot', strategy:'PRECISION', botMode:'PAPER',
+      maxTradeUSD:20, stopLossPct:0.05, takeProfitPct:0.08,
+      maxDrawdownPct:0.20, maxPositionPct:0.35, leverageEnabled:false, maxLeverage:3,
+      balance:ms?.balance||100, portfolio:ms?.portfolio||{}, peakValue:ms?.peakValue||100,
+    };
+  }
 
   const ms = getMem(botId, bot);
   if (ms.status === 'cycling') return;
@@ -210,7 +222,11 @@ export async function startBot(botId) {
   const CYCLE_MS = parseInt(process.env.CYCLE_INTERVAL_SECONDS||'60') * 1000;
 
   getMem(botId, bot);
-  await Bots.update(botId, { enabled:true, status:'running', startedAt:new Date().toISOString() });
+  await Bots.update(botId, { enabled:true, status:'running', startedAt:new Date().toISOString() }).catch(()=>{});
+  // Pre-seed 80 candles of history so trades fire from cycle 1
+  const botKey = botId;
+  ulog(botId, bot.userId, `⏳ Seeding price history for ${COINS.length} coins...`, 'SYSTEM');
+  seedPriceHistory(botKey).then(n=>ulog(botId, bot.userId, `✅ History seeded (${n} coins ready)`, 'SYSTEM')).catch(()=>{});
   startPriceRefresh(bot.userId);
   const cycleTimer = setInterval(() => runBotCycle(botId, bot.userId), CYCLE_MS);
   botTimers.set(botId, cycleTimer);

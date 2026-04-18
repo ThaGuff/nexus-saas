@@ -1,31 +1,20 @@
 /**
- * NEXUS SAAS · Algorithm v7 — 7 Expert Strategy Modes
- * 
- * STRATEGIES (user-selectable):
- * 1. PRECISION  — RSI+MACD+BB triple confirm, highest win rate (~75-80%), fewer trades
- * 2. MOMENTUM   — EMA cascade + volume surge, rides strong trends
- * 3. REVERSAL   — Deep oversold mean reversion, highest R:R ratio
- * 4. BREAKOUT   — BB squeeze + volume explosion, captures big moves
- * 5. SWING      — Multi-day position trading, patient entries/exits
- * 6. AGGRESSIVE — High risk/reward, wider stops, larger targets
- * 7. DCA_PLUS   — Dollar cost average into dips with technical confirmation
- *
- * COIN UNIVERSE: 33 liquid pairs (Binance)
- * SETTINGS: All read from user.settings in DB, applied per cycle
+ * NEXUS SAAS · Algorithm v8
+ * KEY FIX: Pre-seeds history from Binance klines on first fetch
+ * so trades can execute from cycle 1, not cycle 20+
  */
 
 import axios from 'axios';
 
 const BINANCE = 'https://api.binance.com/api/v3';
+const MIN_TICKS = 5; // reduced from 20 — history is pre-seeded now
 
 export const COINS = [
-  // Tier 1 — Core (highest liquidity, tightest spreads)
   { id:'BTCUSDT',    symbol:'BTC',    tier:1, weight:1.5 },
   { id:'ETHUSDT',    symbol:'ETH',    tier:1, weight:1.4 },
   { id:'SOLUSDT',    symbol:'SOL',    tier:1, weight:1.3 },
   { id:'XRPUSDT',    symbol:'XRP',    tier:1, weight:1.2 },
   { id:'BNBUSDT',    symbol:'BNB',    tier:1, weight:1.2 },
-  // Tier 2 — Large Cap
   { id:'AVAXUSDT',   symbol:'AVAX',   tier:2, weight:1.1 },
   { id:'DOTUSDT',    symbol:'DOT',    tier:2, weight:1.0 },
   { id:'LINKUSDT',   symbol:'LINK',   tier:2, weight:1.0 },
@@ -34,7 +23,6 @@ export const COINS = [
   { id:'ATOMUSDT',   symbol:'ATOM',   tier:2, weight:0.9 },
   { id:'UNIUSDT',    symbol:'UNI',    tier:2, weight:0.9 },
   { id:'MATICUSDT',  symbol:'MATIC',  tier:2, weight:0.9 },
-  // Tier 3 — Mid Cap
   { id:'NEARUSDT',   symbol:'NEAR',   tier:3, weight:0.9 },
   { id:'APTUSDT',    symbol:'APT',    tier:3, weight:0.9 },
   { id:'ARBUSDT',    symbol:'ARB',    tier:3, weight:0.9 },
@@ -44,7 +32,6 @@ export const COINS = [
   { id:'SEIUSDT',    symbol:'SEI',    tier:3, weight:0.8 },
   { id:'TIAUSDT',    symbol:'TIA',    tier:3, weight:0.8 },
   { id:'DOGEUSDT',   symbol:'DOGE',   tier:3, weight:0.8 },
-  // Tier 4 — High Volatility / High Reward
   { id:'FETUSDT',    symbol:'FET',    tier:4, weight:0.8 },
   { id:'RENDERUSDT', symbol:'RENDER', tier:4, weight:0.8 },
   { id:'WLDUSDT',    symbol:'WLD',    tier:4, weight:0.7 },
@@ -60,31 +47,53 @@ export const COINS = [
 
 const PAIR_TO_SYM = Object.fromEntries(COINS.map(c => [c.id, c.symbol]));
 
-// Per-user price/volume/RSI history
-const pH  = new Map(); // userId -> {SYM: []}
-const vH  = new Map();
-const rH  = new Map(); // RSI history for trend detection
+// Per-key history (key = userId+botId for isolation)
+const pH = new Map();
+const vH = new Map();
+const rH = new Map();
 
-function getPH(uid, sym) {
-  if (!pH.has(uid)) pH.set(uid, {});
-  if (!pH.get(uid)[sym]) pH.get(uid)[sym] = [];
-  return pH.get(uid)[sym];
-}
-function getVH(uid, sym) {
-  if (!vH.has(uid)) vH.set(uid, {});
-  if (!vH.get(uid)[sym]) vH.get(uid)[sym] = [];
-  return vH.get(uid)[sym];
-}
-function getRH(uid, sym) {
-  if (!rH.has(uid)) rH.set(uid, {});
-  if (!rH.get(uid)[sym]) rH.get(uid)[sym] = [];
-  return rH.get(uid)[sym];
+function getPH(k,s){if(!pH.has(k))pH.set(k,{});if(!pH.get(k)[s])pH.get(k)[s]=[];return pH.get(k)[s];}
+function getVH(k,s){if(!vH.has(k))vH.set(k,{});if(!vH.get(k)[s])vH.get(k)[s]=[];return vH.get(k)[s];}
+function getRH(k,s){if(!rH.has(k))rH.set(k,{});if(!rH.get(k)[s])rH.get(k)[s]=[];return rH.get(k)[s];}
+
+/**
+ * Pre-seed 60 candles of history from Binance klines
+ * Called once per bot on startup — eliminates the cold-start problem
+ */
+export async function seedPriceHistory(botKey) {
+  const seeded = new Set();
+  const batches = [];
+  for (let i = 0; i < COINS.length; i += 5) batches.push(COINS.slice(i, i + 5));
+
+  for (const batch of batches) {
+    await Promise.allSettled(batch.map(async ({ id, symbol }) => {
+      try {
+        const res = await axios.get(`${BINANCE}/klines`, {
+          params: { symbol: id, interval: '1m', limit: 80 },
+          timeout: 8000,
+        });
+        const closes = res.data.map(k => parseFloat(k[4]));
+        const volumes= res.data.map(k => parseFloat(k[5]));
+        const ph = getPH(botKey, symbol);
+        const vh = getVH(botKey, symbol);
+        // Only seed if empty
+        if (ph.length === 0) {
+          ph.push(...closes);
+          vh.push(...volumes);
+          seeded.add(symbol);
+        }
+      } catch {}
+    }));
+    // Small delay between batches to avoid rate limiting
+    await new Promise(r => setTimeout(r, 200));
+  }
+  console.log(`[Algo] Seeded history for ${seeded.size} coins`);
+  return seeded.size;
 }
 
-export async function fetchPrices(userId) {
+export async function fetchPrices(botKey) {
   const allIds = COINS.map(c => c.id);
   const result = {};
-  // Batch into groups of 20 (Binance limit)
   for (let i = 0; i < allIds.length; i += 20) {
     try {
       const batch = allIds.slice(i, i + 20);
@@ -104,15 +113,16 @@ export async function fetchPrices(userId) {
           low24h:    parseFloat(t.lowPrice) || price,
           openPrice: parseFloat(t.openPrice) || price,
         };
-        const p = getPH(userId, sym); p.push(price); if (p.length > 120) p.shift();
-        const v = getVH(userId, sym); v.push(parseFloat(t.quoteVolume)||0); if (v.length > 120) v.shift();
+        // Append to history
+        const p = getPH(botKey, sym); p.push(price); if (p.length > 120) p.shift();
+        const v = getVH(botKey, sym); v.push(parseFloat(t.quoteVolume)||0); if (v.length > 120) v.shift();
       }
-    } catch(e) { console.error('[Algo] Batch error:', e.message); }
+    } catch (e) { console.error('[Algo] Batch error:', e.message); }
   }
   return result;
 }
 
-// ── Math ─────────────────────────────────────────────────────────────────────
+// ── Math ──────────────────────────────────────────────────────────────────────
 function ema(arr, n) {
   if (arr.length < n) return null;
   const k = 2/(n+1);
@@ -120,326 +130,322 @@ function ema(arr, n) {
   for (let i=n;i<arr.length;i++) e=arr[i]*k+e*(1-k);
   return e;
 }
-function rsi(arr, n=14) {
+
+function rsiCalc(arr, n=14) {
   if (arr.length < n+2) return null;
-  const sl=arr.slice(-(n+1));
+  const sl = arr.slice(-(n+1));
   let g=0,l=0;
   for (let i=1;i<sl.length;i++){const d=sl[i]-sl[i-1];if(d>0)g+=d;else l+=Math.abs(d);}
   const ag=g/n,al=l/n;
   return al===0?100:100-100/(1+ag/al);
 }
-function macd(arr) {
-  if (arr.length<35) return null;
+
+function macdCalc(arr) {
+  if (arr.length < 26) return null;
   const e12=ema(arr,12),e26=ema(arr,26);
   if (!e12||!e26) return null;
-  const line=e12-e26;
-  const ms=[]; for(let i=26;i<=arr.length;i++){const a=ema(arr.slice(0,i),12),b=ema(arr.slice(0,i),26);if(a&&b)ms.push(a-b);}
-  const sig=ema(ms,9)||line*0.9;
-  return {line,signal:sig,histogram:line-sig,bullish:line>sig&&(line-sig)>0};
+  const line = e12-e26;
+  const ms=[];
+  for (let i=26;i<=arr.length;i++){const a=ema(arr.slice(0,i),12),b=ema(arr.slice(0,i),26);if(a&&b)ms.push(a-b);}
+  const signal = ms.length>=9?ema(ms,9):line*0.9;
+  const histogram = line-(signal||line*0.9);
+  return {line,signal,histogram,bullish:line>signal&&histogram>0};
 }
-function bb(arr,n=20,mult=2) {
-  if (arr.length<n) return null;
+
+function bbCalc(arr, n=20, mult=2) {
+  if (arr.length < n) {
+    // Use whatever we have if less than 20
+    const sl=arr.slice(-Math.min(arr.length,10));
+    if (sl.length < 3) return null;
+    const m=sl.reduce((a,b)=>a+b)/sl.length;
+    const sd=Math.sqrt(sl.reduce((s,p)=>s+(p-m)**2)/sl.length)||m*0.02;
+    const cur=arr[arr.length-1];
+    return {upper:m+mult*sd,middle:m,lower:m-mult*sd,pct:sd>0?(cur-m)/(mult*sd):0,width:sd>0?(2*mult*sd)/m:0.04};
+  }
   const sl=arr.slice(-n),m=sl.reduce((a,b)=>a+b)/n;
-  const sd=Math.sqrt(sl.reduce((s,p)=>s+(p-m)**2)/n);
+  const sd=Math.sqrt(sl.reduce((s,p)=>s+(p-m)**2)/n)||m*0.02;
   const cur=arr[arr.length-1];
-  return {upper:m+mult*sd,middle:m,lower:m-mult*sd,pct:sd>0?(cur-m)/(mult*sd):0,width:sd>0?(2*mult*sd)/m:0};
+  return {upper:m+mult*sd,middle:m,lower:m-mult*sd,pct:sd>0?(cur-m)/(mult*sd):0,width:sd>0?(2*mult*sd)/m:0.04};
 }
-function atr(arr,n=14) {
-  if (arr.length<n+1) return null;
-  const trs=arr.slice(1).map((p,i)=>Math.abs(p-arr[i]));
-  return trs.slice(-n).reduce((a,b)=>a+b)/n;
-}
+
 function stochRSI(arr,n=14) {
   if (arr.length<n*2) return null;
   const rsiVals=[];
-  for(let i=n;i<=arr.length;i++){const r=rsi(arr.slice(0,i),n);if(r!==null)rsiVals.push(r);}
+  for(let i=n;i<=arr.length;i++){const r=rsiCalc(arr.slice(0,i),n);if(r!==null)rsiVals.push(r);}
   if(rsiVals.length<n) return null;
   const sl=rsiVals.slice(-n),mn=Math.min(...sl),mx=Math.max(...sl);
   return mx===mn?50:((rsiVals[rsiVals.length-1]-mn)/(mx-mn))*100;
 }
-function mom(arr,n) { if(arr.length<n+1)return null; return((arr[arr.length-1]-arr[arr.length-1-n])/arr[arr.length-1-n])*100; }
-function volRatio(vols,n=10) { if(vols.length<n+1)return 1; const r=vols[vols.length-1],avg=vols.slice(-n-1,-1).reduce((a,b)=>a+b)/n; return avg>0?r/avg:1; }
 
-function rsiRecovering(uid,sym) { const h=getRH(uid,sym); return h.length>=3&&h[h.length-1]>h[h.length-2]&&h[h.length-2]>h[h.length-3]; }
-function rsiDecelerating(uid,sym) { const h=getRH(uid,sym); return h.length>=2&&h[h.length-1]<h[h.length-2]; }
+function momCalc(arr,n) { if(arr.length<n+1)return null; return((arr[arr.length-1]-arr[arr.length-1-n])/arr[arr.length-1-n])*100; }
+function volRatio(vols,n=10) { if(vols.length<n+1)return 1.0; const r=vols[vols.length-1],avg=vols.slice(-n-1,-1).reduce((a,b)=>a+b)/n; return avg>0?r/avg:1.0; }
 
-export function computeIndicators(userId, symbol) {
-  const prices=getPH(userId,symbol), vols=getVH(userId,symbol);
-  const rsiVal=rsi(prices);
-  if(rsiVal!==null){const h=getRH(userId,symbol);h.push(rsiVal);if(h.length>12)h.shift();}
-  const e9=ema(prices,9),e21=ema(prices,21),e50=ema(prices,50),e200=ema(prices,200);
-  const macdVal=macd(prices), bbVal=bb(prices), bbTight=bb(prices,20,1.5);
-  const stoch=stochRSI(prices), atrVal=atr(prices);
+function rsiRecovering(k,sym) { const h=getRH(k,sym); return h.length>=3&&h[h.length-1]>h[h.length-2]&&h[h.length-2]>h[h.length-3]; }
+function rsiDecelerating(k,sym) { const h=getRH(k,sym); return h.length>=2&&h[h.length-1]<h[h.length-2]; }
+
+export function computeIndicators(botKey, symbol) {
+  const prices=getPH(botKey,symbol), vols=getVH(botKey,symbol);
+  const rsiVal=rsiCalc(prices);
+  if(rsiVal!==null){const h=getRH(botKey,symbol);h.push(rsiVal);if(h.length>12)h.shift();}
+  const e9=ema(prices,9),e21=ema(prices,21),e50=ema(prices,50);
+  const macdVal=macdCalc(prices);
+  const bbVal=bbCalc(prices);
+  const stoch=stochRSI(prices);
   const vr=volRatio(vols);
   let regime='unknown';
-  if(e9&&e21&&e50){const sp=Math.abs(e9-e50)/e50;regime=sp>0.02?'trending':sp<0.005?'ranging':'neutral';}
+  if(e9&&e21&&e50){const sp=Math.abs(e9-e50)/e50;regime=sp>0.015?'trending':sp<0.005?'ranging':'neutral';}
   return {
     symbol, priceCount:prices.length, currentPrice:prices[prices.length-1]||null,
-    rsi:rsiVal, rsiRecovering:rsiRecovering(userId,symbol), rsiDecelerating:rsiDecelerating(userId,symbol),
-    macd:macdVal, bb:bbVal, bbTight, stochRSI:stoch, atr:atrVal,
-    ema9:e9, ema21:e21, ema50:e50, ema200:e200,
-    mom5:mom(prices,5), mom10:mom(prices,10), mom20:mom(prices,20),
+    rsi:rsiVal, rsiRecovering:rsiRecovering(botKey,symbol), rsiDecelerating:rsiDecelerating(botKey,symbol),
+    macd:macdVal, bb:bbVal, stochRSI:stoch,
+    ema9:e9, ema21:e21, ema50:e50,
+    mom5:momCalc(prices,5), mom10:momCalc(prices,10), mom20:momCalc(prices,20),
     volumeRatio:vr, regime,
   };
 }
 
-// ── 7 STRATEGY ENGINES ───────────────────────────────────────────────────────
-
+// ── 7 STRATEGY ENGINES ────────────────────────────────────────────────────────
 const STRATEGIES = {
 
-  // 1. PRECISION — Triple confirmation: RSI + MACD + BB
-  // Target win rate: 75-80% | Fewer but higher quality trades
   PRECISION: {
-    name: 'Precision',
-    description: 'Triple-confirm entries: RSI+MACD+BB must all align. Highest win rate, fewer trades.',
-    minScore: 10,
-    scoreEntry(ind, prices, sym) {
-      let score=0; const sigs=[];
-      const macdOk=ind.macd&&(ind.macd.bullish||ind.macd.histogram>0);
-      if(!macdOk) return {score:-99,sigs:['MACD_GATE'],strategy:'PRECISION'};
+    name:'Precision', minScore:7,
+    description:'Triple-confirm RSI+MACD+BB. Highest win rate, fewer trades.',
+    scoreEntry(ind,prices,sym){
+      let score=0;const sigs=[];
+      // MACD gate — softer: block only if clearly bearish
+      const macdBearish=ind.macd&&!ind.macd.bullish&&ind.macd.histogram<-0.0005;
+      if(macdBearish&&(!ind.rsi||ind.rsi>30))return{score:-99,sigs:['MACD_BEARISH'],strategy:'PRECISION'};
       if(ind.rsi!==null){
         if(ind.rsi<25&&ind.rsiRecovering){score+=6;sigs.push(`RSI_EXTREME(${ind.rsi.toFixed(1)})↑`);}
         else if(ind.rsi<32&&ind.rsiRecovering){score+=4;sigs.push(`RSI_OVERSOLD(${ind.rsi.toFixed(1)})↑`);}
-        else if(ind.rsi<42&&ind.rsiRecovering){score+=2;sigs.push(`RSI_LOW↑`);}
-        if(!ind.rsiRecovering&&ind.rsi<45){score-=4;sigs.push('RSI_FALLING⚠');}
+        else if(ind.rsi<42&&ind.rsiRecovering){score+=2;sigs.push(`RSI_LOW(${ind.rsi.toFixed(1)})↑`);}
+        else if(ind.rsi>=42&&ind.rsi<=60&&ind.macd?.bullish){score+=2;sigs.push(`RSI_RANGE(${ind.rsi.toFixed(1)})`);}
+        if(!ind.rsiRecovering&&ind.rsi<40){score-=3;sigs.push('RSI_FALLING⚠');}
       }
-      if(ind.macd){if(ind.macd.bullish&&ind.macd.histogram>0){score+=4;sigs.push('MACD_BULL');}else if(ind.macd.histogram>0){score+=1;}}
-      if(ind.bb){if(ind.bb.pct<-0.85){score+=4;sigs.push(`BB_EXTREME`);}else if(ind.bb.pct<-0.5){score+=2;sigs.push(`BB_LOWER`);}}
-      if(ind.stochRSI!==null&&ind.stochRSI<20){score+=3;sigs.push(`STOCH_OVERSOLD(${ind.stochRSI.toFixed(0)})`);}
-      if(ind.volumeRatio>2){score+=2;sigs.push(`VOL_SURGE`);}else if(ind.volumeRatio<0.7){score-=2;}
+      if(ind.macd){
+        if(ind.macd.bullish&&ind.macd.histogram>0){score+=4;sigs.push('MACD_BULL');}
+        else if(ind.macd.histogram>0){score+=2;sigs.push('MACD_HIST+');}
+        else if(ind.macd.histogram>-0.0001){score+=1;sigs.push('MACD_NEUTRAL');}
+      }
+      if(ind.bb){
+        if(ind.bb.pct<-0.8){score+=4;sigs.push(`BB_EXTREME`);}
+        else if(ind.bb.pct<-0.4){score+=2;sigs.push(`BB_LOWER`);}
+        else if(ind.bb.pct<0){score+=1;sigs.push('BB_BELOW_MID');}
+      }
+      if(ind.stochRSI!==null&&ind.stochRSI<25){score+=2;sigs.push(`STOCH(${ind.stochRSI.toFixed(0)})`);}
+      if(ind.volumeRatio>1.5){score+=2;sigs.push(`VOL(${ind.volumeRatio.toFixed(1)}x)`);}
+      else if(ind.volumeRatio<0.6){score-=1;}
       if(ind.ema9&&ind.ema21&&ind.ema9>ind.ema21){score+=1;sigs.push('EMA9>21');}
-      return {score,sigs,strategy:'PRECISION'};
+      return{score,sigs,strategy:'PRECISION'};
     },
   },
 
-  // 2. MOMENTUM — EMA cascade + ADX trend strength
-  // Target win rate: 65-72% | Bigger average wins
   MOMENTUM: {
-    name: 'Momentum',
-    description: 'Ride strong trends using EMA cascade and volume surges. Best in bull markets.',
-    minScore: 7,
-    scoreEntry(ind, prices, sym) {
-      let score=0; const sigs=[];
-      if(ind.regime!=='trending'){score-=2;sigs.push('NOT_TRENDING⚠');}
-      if(ind.ema9&&ind.ema21&&ind.ema9>ind.ema21){score+=2;sigs.push('EMA9>21');}
+    name:'Momentum', minScore:6,
+    description:'EMA cascade + volume surge. Rides strong trends.',
+    scoreEntry(ind,prices,sym){
+      let score=0;const sigs=[];
+      if(ind.ema9&&ind.ema21&&ind.ema9>ind.ema21){score+=3;sigs.push('EMA9>21');}
       if(ind.ema21&&ind.ema50&&ind.ema21>ind.ema50){score+=3;sigs.push('EMA21>50');}
-      if(ind.ema50&&ind.ema200&&ind.ema50>ind.ema200){score+=2;sigs.push('EMA50>200_BULL');}
       if(ind.macd?.bullish){score+=3;sigs.push('MACD_BULL');}
-      if(ind.rsi!==null&&ind.rsi>=45&&ind.rsi<=65){score+=2;sigs.push(`RSI_MOMENTUM(${ind.rsi.toFixed(1)})`);}
-      if(ind.mom10!==null&&ind.mom10>1.5){score+=3;sigs.push(`MOM10(+${ind.mom10.toFixed(2)}%)`);}
-      if(ind.mom20!==null&&ind.mom20>3){score+=2;sigs.push(`MOM20(+${ind.mom20.toFixed(2)}%)`);}
+      else if(ind.macd?.histogram>0){score+=1;sigs.push('MACD+');}
+      if(ind.rsi!==null&&ind.rsi>=40&&ind.rsi<=68){score+=2;sigs.push(`RSI(${ind.rsi.toFixed(1)})`);}
+      if(ind.mom10!==null&&ind.mom10>1){score+=2;sigs.push(`MOM10(+${ind.mom10.toFixed(2)}%)`);}
+      if(ind.mom5!==null&&ind.mom5>0.3){score+=1;sigs.push(`MOM5+`);}
       if(ind.volumeRatio>2){score+=3;sigs.push(`VOL_SURGE(${ind.volumeRatio.toFixed(1)}x)`);}
-      else if(ind.volumeRatio>1.5){score+=1;}
+      else if(ind.volumeRatio>1.3){score+=1;sigs.push('VOL+');}
       const chg=(prices[sym]?.change24h||0);
-      if(chg>5){score+=2;sigs.push(`24H+${chg.toFixed(1)}%`);}
-      return {score,sigs,strategy:'MOMENTUM'};
+      if(chg>3){score+=2;sigs.push(`24H+${chg.toFixed(1)}%`);}
+      else if(chg>1){score+=1;}
+      if(ind.regime==='trending'){score+=1;sigs.push('TRENDING');}
+      return{score,sigs,strategy:'MOMENTUM'};
     },
   },
 
-  // 3. REVERSAL — Deep oversold mean reversion
-  // Target win rate: 70-78% | High R:R, requires patience
   REVERSAL: {
-    name: 'Mean Reversion',
-    description: 'Buy extreme oversold conditions. RSI<25 + BB lower touch + StochRSI<15.',
-    minScore: 9,
-    scoreEntry(ind) {
-      let score=0; const sigs=[];
-      if(ind.rsi===null||ind.rsi>35) return {score:-99,sigs:['RSI_TOO_HIGH'],strategy:'REVERSAL'};
-      if(ind.rsi<20&&ind.rsiRecovering){score+=7;sigs.push(`RSI_EXTREME(${ind.rsi.toFixed(1)})↑`);}
-      else if(ind.rsi<25&&ind.rsiRecovering){score+=5;sigs.push(`RSI_VERY_OVERSOLD(${ind.rsi.toFixed(1)})↑`);}
-      else if(ind.rsi<35&&ind.rsiRecovering){score+=3;sigs.push(`RSI_OVERSOLD(${ind.rsi.toFixed(1)})↑`);}
-      if(!ind.rsiRecovering){score-=5;sigs.push('NOT_RECOVERING⚠');}
-      if(ind.bb?.pct<-0.9){score+=5;sigs.push('BB_EXTREME_LOWER');}
-      else if(ind.bb?.pct<-0.7){score+=3;sigs.push('BB_LOWER');}
-      if(ind.stochRSI!==null&&ind.stochRSI<15){score+=4;sigs.push(`STOCH_EXTREME(${ind.stochRSI.toFixed(0)})`);}
-      if(ind.macd?.bullish){score+=2;sigs.push('MACD_CONFIRM');}
-      if(ind.volumeRatio>1.5){score+=2;sigs.push('VOL_CONFIRM');}
-      return {score,sigs,strategy:'REVERSAL'};
+    name:'Mean Reversion', minScore:7,
+    description:'Deep oversold bounce. RSI<30 + BB lower.',
+    scoreEntry(ind){
+      let score=0;const sigs=[];
+      if(ind.rsi===null||ind.rsi>40)return{score:-99,sigs:['RSI_NOT_OVERSOLD'],strategy:'REVERSAL'};
+      if(ind.rsi<22&&ind.rsiRecovering){score+=8;sigs.push(`RSI_EXTREME(${ind.rsi.toFixed(1)})↑`);}
+      else if(ind.rsi<28&&ind.rsiRecovering){score+=6;sigs.push(`RSI_OVERSOLD(${ind.rsi.toFixed(1)})↑`);}
+      else if(ind.rsi<35&&ind.rsiRecovering){score+=4;sigs.push(`RSI_LOW(${ind.rsi.toFixed(1)})↑`);}
+      else if(ind.rsi<40){score+=2;sigs.push(`RSI_BELOW40(${ind.rsi.toFixed(1)})`);}
+      if(!ind.rsiRecovering){score-=3;sigs.push('NOT_RECOVERING⚠');}
+      if(ind.bb?.pct<-0.8){score+=4;sigs.push('BB_EXTREME');}
+      else if(ind.bb?.pct<-0.5){score+=2;sigs.push('BB_LOWER');}
+      else if(ind.bb?.pct<-0.2){score+=1;sigs.push('BB_LOW');}
+      if(ind.stochRSI!==null&&ind.stochRSI<20){score+=3;sigs.push(`STOCH_LOW(${ind.stochRSI.toFixed(0)})`);}
+      if(ind.macd?.bullish||ind.macd?.histogram>0){score+=2;sigs.push('MACD_TURNING');}
+      if(ind.volumeRatio>1.3){score+=1;sigs.push('VOL+');}
+      return{score,sigs,strategy:'REVERSAL'};
     },
   },
 
-  // 4. BREAKOUT — BB squeeze + volume explosion
-  // Target win rate: 60-68% | Largest average wins
   BREAKOUT: {
-    name: 'Breakout',
-    description: 'Captures explosive moves from BB squeezes. High reward potential, moderate win rate.',
-    minScore: 8,
-    scoreEntry(ind, prices, sym) {
-      let score=0; const sigs=[];
-      if(!ind.bb||ind.bb.width>0.08){return {score:-99,sigs:['NO_SQUEEZE'],strategy:'BREAKOUT'};}
-      if(ind.bb.width<0.03){score+=5;sigs.push(`BB_TIGHT_SQUEEZE(${(ind.bb.width*100).toFixed(2)}%)`);}
-      else if(ind.bb.width<0.05){score+=3;sigs.push('BB_SQUEEZE');}
-      if(ind.volumeRatio>2.5){score+=5;sigs.push(`VOL_EXPLOSION(${ind.volumeRatio.toFixed(1)}x)`);}
-      else if(ind.volumeRatio>1.8){score+=3;sigs.push('VOL_SURGE');}
-      else{score-=3;sigs.push('VOL_WEAK⚠');}
-      if(ind.macd?.bullish){score+=3;sigs.push('MACD_BULL');}
-      if(ind.mom5!==null&&ind.mom5>0.5){score+=2;sigs.push(`MOM5_POS`);}
-      if(ind.rsi!==null&&ind.rsi>45&&ind.rsi<70){score+=2;sigs.push(`RSI_OK(${ind.rsi.toFixed(1)})`);}
-      if(ind.bb.pct>0){score+=2;sigs.push('PRICE_ABOVE_MID');}
-      return {score,sigs,strategy:'BREAKOUT'};
-    },
-  },
-
-  // 5. SWING — Multi-day position trading
-  // Target win rate: 68-75% | Holds 2-7 days
-  SWING: {
-    name: 'Swing Trade',
-    description: 'Captures multi-day moves. Patient entries on pullbacks, rides the full trend.',
-    minScore: 8,
-    scoreEntry(ind, prices, sym) {
-      let score=0; const sigs=[];
-      if(ind.ema21&&ind.ema50&&ind.ema21>ind.ema50){score+=3;sigs.push('UPTREND_CONFIRMED');}
-      if(ind.rsi!==null){
-        if(ind.rsi>30&&ind.rsi<50&&ind.rsiRecovering){score+=4;sigs.push(`RSI_PULLBACK(${ind.rsi.toFixed(1)})↑`);}
-        else if(ind.rsi<35&&ind.rsiRecovering){score+=3;sigs.push(`RSI_DIP(${ind.rsi.toFixed(1)})↑`);}
+    name:'Breakout', minScore:7,
+    description:'BB squeeze + volume explosion. Captures big moves.',
+    scoreEntry(ind,prices,sym){
+      let score=0;const sigs=[];
+      if(ind.bb){
+        if(ind.bb.width<0.03){score+=5;sigs.push(`BB_SQUEEZE(${(ind.bb.width*100).toFixed(2)}%)`);}
+        else if(ind.bb.width<0.05){score+=3;sigs.push('BB_TIGHT');}
+        else if(ind.bb.width<0.08){score+=1;sigs.push('BB_COMPRESSING');}
+        else{score-=2;}// Wide bands — no squeeze
+        if(ind.bb.pct>0.2){score+=2;sigs.push('BREAKING_UP');}
       }
-      if(ind.bb?.pct>-0.6&&ind.bb?.pct<0){score+=2;sigs.push('PRICE_BELOW_MID');}
-      if(ind.macd?.bullish){score+=3;sigs.push('MACD_BULL');}
-      if(ind.ema9&&ind.ema21&&ind.ema9>ind.ema21){score+=2;sigs.push('EMA9>21');}
-      if(ind.mom20!==null&&ind.mom20>2){score+=2;sigs.push(`TREND_MOM(${ind.mom20.toFixed(1)}%)`);}
-      if(ind.volumeRatio>1.3){score+=2;sigs.push('VOL_CONFIRM');}
-      return {score,sigs,strategy:'SWING'};
+      if(ind.volumeRatio>2.5){score+=5;sigs.push(`VOL_EXPLOSION(${ind.volumeRatio.toFixed(1)}x)`);}
+      else if(ind.volumeRatio>1.8){score+=3;sigs.push(`VOL_SURGE`);}
+      else if(ind.volumeRatio>1.3){score+=1;}
+      else{score-=1;}
+      if(ind.macd?.bullish||ind.macd?.histogram>0){score+=2;sigs.push('MACD+');}
+      if(ind.mom5!==null&&ind.mom5>0.4){score+=2;sigs.push(`MOM5+`);}
+      if(ind.rsi!==null&&ind.rsi>40&&ind.rsi<75){score+=1;sigs.push(`RSI_OK`);}
+      return{score,sigs,strategy:'BREAKOUT'};
     },
   },
 
-  // 6. AGGRESSIVE — High risk/reward setups
-  // Target win rate: 55-65% | Largest potential gains
+  SWING: {
+    name:'Swing Trade', minScore:6,
+    description:'Multi-day positions. Pullback entries in uptrends.',
+    scoreEntry(ind,prices,sym){
+      let score=0;const sigs=[];
+      if(ind.ema21&&ind.ema50&&ind.ema21>ind.ema50){score+=3;sigs.push('UPTREND');}
+      if(ind.rsi!==null){
+        if(ind.rsi>28&&ind.rsi<50&&ind.rsiRecovering){score+=4;sigs.push(`RSI_PULLBACK(${ind.rsi.toFixed(1)})↑`);}
+        else if(ind.rsi<35&&ind.rsiRecovering){score+=3;sigs.push(`RSI_DIP`);}
+        else if(ind.rsi<55){score+=1;sigs.push(`RSI_OK`);}
+      }
+      if(ind.bb?.pct>-0.6&&ind.bb?.pct<0.1){score+=2;sigs.push('BB_LOWER_HALF');}
+      if(ind.macd?.bullish||ind.macd?.histogram>0){score+=3;sigs.push('MACD+');}
+      if(ind.ema9&&ind.ema21&&ind.ema9>ind.ema21){score+=2;sigs.push('EMA9>21');}
+      if(ind.mom20!==null&&ind.mom20>1.5){score+=2;sigs.push(`TREND_MOM`);}
+      if(ind.volumeRatio>1.2){score+=1;sigs.push('VOL+');}
+      return{score,sigs,strategy:'SWING'};
+    },
+  },
+
   AGGRESSIVE: {
-    name: 'Aggressive',
-    description: 'High risk/high reward. Wider stops, bigger targets. Not for the faint-hearted.',
-    minScore: 6,
-    scoreEntry(ind, prices, sym) {
-      let score=0; const sigs=[];
+    name:'Aggressive', minScore:5,
+    description:'High risk/reward. Wider stops, bigger targets.',
+    scoreEntry(ind,prices,sym){
+      let score=0;const sigs=[];
       const chg=prices[sym]?.change24h||0;
       if(ind.volumeRatio>3){score+=5;sigs.push(`VOL_MASSIVE(${ind.volumeRatio.toFixed(1)}x)`);}
-      else if(ind.volumeRatio>2){score+=3;sigs.push('VOL_HIGH');}
-      if(ind.macd?.bullish){score+=3;sigs.push('MACD_BULL');}
-      if(ind.mom5!==null&&ind.mom5>1){score+=3;sigs.push(`MOM5(+${ind.mom5.toFixed(2)}%)`);}
-      if(ind.rsi!==null&&ind.rsi<40&&ind.rsiRecovering){score+=3;sigs.push(`RSI_BOUNCE(${ind.rsi.toFixed(1)})`);}
-      if(chg>3&&chg<15){score+=2;sigs.push(`24H_PUMP(+${chg.toFixed(1)}%)`);}
-      if(chg<-8&&ind.rsiRecovering){score+=3;sigs.push('DEEP_DIP_BOUNCE');}
-      if(ind.bb?.pct<-0.6){score+=2;sigs.push('BB_LOWER_AGGRESSIVE');}
-      return {score,sigs,strategy:'AGGRESSIVE'};
+      else if(ind.volumeRatio>2){score+=3;sigs.push(`VOL_HIGH`);}
+      else if(ind.volumeRatio>1.3){score+=1;}
+      if(ind.macd?.bullish||ind.macd?.histogram>0){score+=2;sigs.push('MACD+');}
+      if(ind.mom5!==null&&ind.mom5>0.5){score+=3;sigs.push(`MOM5(+${ind.mom5.toFixed(2)}%)`);}
+      else if(ind.mom5!==null&&ind.mom5>0){score+=1;}
+      if(ind.rsi!==null&&ind.rsi<45&&ind.rsiRecovering){score+=3;sigs.push(`RSI_BOUNCE(${ind.rsi.toFixed(1)})`);}
+      else if(ind.rsi!==null&&ind.rsi<60){score+=1;}
+      if(chg>2&&chg<20){score+=2;sigs.push(`24H_PUMP(+${chg.toFixed(1)}%)`);}
+      if(chg<-5&&ind.rsiRecovering){score+=3;sigs.push('DEEP_DIP_BOUNCE');}
+      else if(chg<-2){score+=1;sigs.push('DIP');}
+      if(ind.bb?.pct<-0.3){score+=1;sigs.push('BB_BELOW_MID');}
+      return{score,sigs,strategy:'AGGRESSIVE'};
     },
   },
 
-  // 7. DCA_PLUS — Systematic dip buying with confirmation
-  // Target win rate: 78-85% | Steady compounding, lowest risk
   DCA_PLUS: {
-    name: 'DCA+',
-    description: 'Dollar-cost-average into dips with technical confirmation. Most consistent, lowest risk.',
-    minScore: 5,
-    scoreEntry(ind, prices, sym) {
-      let score=0; const sigs=[];
+    name:'DCA+', minScore:4,
+    description:'Systematic dip buying with tech confirmation. Most consistent.',
+    scoreEntry(ind,prices,sym){
+      let score=0;const sigs=[];
       const chg=prices[sym]?.change24h||0;
-      // Only buy BTC/ETH/SOL tier-1 coins for safety
       const coin=COINS.find(c=>c.symbol===sym);
-      if(coin?.tier>2){score-=3;sigs.push('TIER_PENALTY');}
-      if(chg<-3){score+=3;sigs.push(`DIP(${chg.toFixed(1)}%)`);}
-      if(chg<-7){score+=2;sigs.push('DEEP_DIP');}
-      if(ind.rsi!==null&&ind.rsi<45){score+=2;sigs.push(`RSI_BELOW_MID(${ind.rsi.toFixed(1)})`);}
+      if(coin?.tier===1){score+=2;sigs.push('TIER1_SAFE');}
+      else if(coin?.tier===2){score+=1;}
+      else{score-=1;sigs.push('HIGH_TIER⚠');}
+      if(chg<-2){score+=3;sigs.push(`DIP(${chg.toFixed(1)}%)`);}
+      else if(chg<0){score+=1;sigs.push('SLIGHT_DIP');}
+      if(ind.rsi!==null&&ind.rsi<50){score+=2;sigs.push(`RSI_BELOW_MID(${ind.rsi.toFixed(1)})`);}
       if(ind.rsiRecovering){score+=2;sigs.push('RSI_RECOVERING');}
-      if(ind.ema21&&ind.ema50&&ind.ema21>ind.ema50){score+=3;sigs.push('ABOVE_50EMA');}
-      if(ind.volumeRatio>1.2){score+=1;sigs.push('VOL_OK');}
-      return {score,sigs,strategy:'DCA_PLUS'};
+      if(ind.ema21&&ind.ema50&&ind.ema21>ind.ema50){score+=2;sigs.push('ABOVE_50EMA');}
+      if(ind.macd?.bullish||ind.macd?.histogram>0){score+=1;sigs.push('MACD+');}
+      if(ind.volumeRatio>1.1){score+=1;sigs.push('VOL_OK');}
+      return{score,sigs,strategy:'DCA_PLUS'};
     },
   },
 };
 
-export const STRATEGY_LIST = Object.entries(STRATEGIES).map(([key, s]) => ({
-  key, name: s.name, description: s.description, minScore: s.minScore,
-}));
+export const STRATEGY_LIST = Object.entries(STRATEGIES).map(([key,s])=>({key,name:s.name,description:s.description,minScore:s.minScore}));
 
-/**
- * Main entry scoring — uses selected strategy
- */
-export function scoreForBuy(userId, symbol, prices, portfolio, totalValue, settings) {
+export function scoreForBuy(botKey, symbol, prices, portfolio, totalValue, settings) {
   const stratKey = settings.tradingStrategy || 'PRECISION';
-  const strat = STRATEGIES[stratKey] || STRATEGIES.PRECISION;
-  const ind = computeIndicators(userId, symbol);
+  const strat    = STRATEGIES[stratKey] || STRATEGIES.PRECISION;
+  const ind      = computeIndicators(botKey, symbol);
 
-  if (ind.priceCount < 20) return { score: 0, signals: ['BUILDING_HISTORY'], ind };
+  if (ind.priceCount < MIN_TICKS) return { score:0, signals:[`NEED_${MIN_TICKS}_TICKS(have ${ind.priceCount})`], ind, minScore:strat.minScore };
+
   const px = prices[symbol]?.price;
-  if (!px) return { score: 0, signals: [], ind };
+  if (!px) return { score:0, signals:['NO_PRICE'], ind, minScore:strat.minScore };
 
   const maxPos = settings.maxPositionPct || 0.35;
   const posVal = (portfolio[symbol]?.qty || 0) * px;
-  if (posVal / Math.max(totalValue, 1) > maxPos) return { score: 0, signals: ['MAX_POSITION'], ind };
+  if (posVal / Math.max(totalValue,1) > maxPos) return { score:0, signals:['MAX_POSITION'], ind, minScore:strat.minScore };
 
   const { score, sigs, strategy } = strat.scoreEntry(ind, prices, symbol);
   const weight = COINS.find(c => c.symbol === symbol)?.weight || 1;
-  const finalScore = +(score * weight).toFixed(2);
-
-  return { score: finalScore, rawScore: score, signals: sigs, strategy, minScore: strat.minScore, ind };
+  return { score: +(score * weight).toFixed(2), rawScore:score, signals:sigs||[], strategy, minScore:strat.minScore, ind };
 }
 
-/**
- * Exit evaluation — adapts to strategy
- */
-export function evaluateExit(userId, symbol, pos, prices, settings) {
-  const ind = computeIndicators(userId, symbol);
+export function evaluateExit(botKey, symbol, pos, prices, settings) {
+  const ind = computeIndicators(botKey, symbol);
   const cur = prices[symbol]?.price;
   if (!cur || !pos) return null;
 
-  const stratKey = settings.tradingStrategy || 'PRECISION';
   const sl  = settings.stopLossPct   || 0.05;
   const tp  = settings.takeProfitPct || 0.08;
   const lev = pos.leverage || 1;
-  const pnl = (cur - pos.avgCost) / pos.avgCost;
-  const eff = pnl * lev;
+  const pnlPct = (cur - pos.avgCost) / pos.avgCost;
+  const eff    = pnlPct * lev;
 
-  // Hard stop — always
+  // Hard stop
   if (eff <= -sl) {
     return { action:'SELL', sellPct:1.0, confidence:10, strategy:'STOP_LOSS',
       signals:[`STOP_LOSS(${(eff*100).toFixed(1)}%)`],
-      reasoning:`Stop-loss at ${(eff*100).toFixed(2)}%. Entry $${pos.avgCost.toFixed(4)} → $${cur.toFixed(4)}.` };
+      reasoning:`Stop-loss hit at ${(eff*100).toFixed(2)}%. Entry $${pos.avgCost.toFixed(4)} → $${cur.toFixed(4)}.` };
   }
 
-  // Trailing stop for big winners
-  if (eff > tp * 2.5) {
-    const trail = eff * 0.45; // keep 55% of gains
-    if (pnl < trail - sl) {
-      return { action:'SELL', sellPct:0.65, confidence:8, strategy:'TRAIL_STOP',
-        signals:[`TRAIL(+${(eff*100).toFixed(1)}%)`],
-        reasoning:`Trailing stop: up +${(eff*100).toFixed(2)}%, locking gains.` };
-    }
+  // Trailing stop
+  if (eff > tp * 2 && pnlPct < eff * 0.5 - sl) {
+    return { action:'SELL', sellPct:0.65, confidence:8, strategy:'TRAIL_STOP',
+      signals:[`TRAIL(+${(eff*100).toFixed(1)}%)`],
+      reasoning:`Trailing stop: +${(eff*100).toFixed(2)}% gain, protecting profits.` };
   }
 
-  // Aggressive strategy: wider exits
-  const exitThresh = stratKey === 'AGGRESSIVE' ? 8 : stratKey === 'DCA_PLUS' ? 4 : 5;
-
-  let exitScore = 0; const exitSigs = [];
-  if (ind.rsi!==null){
-    const obLevel = stratKey==='AGGRESSIVE'?78:stratKey==='SWING'?72:70;
-    if(ind.rsi>obLevel){exitScore+=4;exitSigs.push(`RSI_OB(${ind.rsi.toFixed(1)})`);}
-    else if(ind.rsi>65){exitScore+=2;exitSigs.push(`RSI_HIGH`);}
-    if(ind.rsiDecelerating&&ind.rsi>60){exitScore+=2;exitSigs.push('RSI_DECEL');}
+  let exitScore=0;const exitSigs=[];
+  if(ind.rsi!==null){
+    if(ind.rsi>75){exitScore+=4;exitSigs.push(`RSI_OB(${ind.rsi.toFixed(1)})`);}
+    else if(ind.rsi>68){exitScore+=2;exitSigs.push(`RSI_HIGH`);}
+    if(ind.rsiDecelerating&&ind.rsi>62){exitScore+=2;exitSigs.push('RSI_DECEL');}
   }
-  if(ind.macd&&!ind.macd.bullish){exitScore+=3;exitSigs.push('MACD_BEAR');}
-  if(ind.macd&&ind.macd.histogram<-0.0001){exitScore+=1;exitSigs.push('HIST-');}
-  if(ind.bb?.pct>0.9){exitScore+=2;exitSigs.push('ABOVE_BB');}
-  if(ind.ema9&&ind.ema21&&ind.ema9<ind.ema21){exitScore+=2;exitSigs.push('EMA_DEATH');}
+  if(ind.macd&&!ind.macd.bullish&&ind.macd.histogram<0){exitScore+=3;exitSigs.push('MACD_BEAR');}
+  if(ind.bb?.pct>0.85){exitScore+=2;exitSigs.push('ABOVE_BB');}
+  if(ind.ema9&&ind.ema21&&ind.ema9<ind.ema21){exitScore+=2;exitSigs.push('EMA_CROSS');}
   if(ind.mom5!==null&&ind.mom5<-0.8){exitScore+=1;exitSigs.push('MOM5-');}
 
-  if(eff>=tp*1.5&&exitScore>=3){
-    return {action:'SELL',sellPct:0.5,confidence:8,strategy:'TAKE_PROFIT',
+  // Partial take profit
+  if(eff>=tp*1.5&&exitScore>=2){
+    return{action:'SELL',sellPct:0.5,confidence:8,strategy:'TAKE_PROFIT',
       signals:[`TP(+${(eff*100).toFixed(1)}%)`,...exitSigs],
-      reasoning:`TP +${(eff*100).toFixed(2)}% with ${exitScore} reversal signals. Holding 50% runner.`};
+      reasoning:`Take profit +${(eff*100).toFixed(2)}% with ${exitScore} reversal signals. Keeping 50% runner.`};
   }
-  if(eff>=tp&&exitScore>=exitThresh){
-    return {action:'SELL',sellPct:0.6,confidence:9,strategy:'TAKE_PROFIT',
+  if(eff>=tp&&exitScore>=4){
+    return{action:'SELL',sellPct:0.6,confidence:9,strategy:'TAKE_PROFIT',
       signals:[`TP(+${(eff*100).toFixed(1)}%)`,...exitSigs],
-      reasoning:`Take-profit at +${(eff*100).toFixed(2)}% (${exitScore} signals). Selling 60%.`};
+      reasoning:`Take profit at +${(eff*100).toFixed(2)}% — ${exitSigs.join(', ')}. Selling 60%.`};
   }
-  if(exitScore>=7&&eff>0.005){
-    return {action:'SELL',sellPct:0.75,confidence:7,strategy:'TREND_REVERSAL',
-      signals:exitSigs,reasoning:`Reversal confirmed (${exitScore} signals). Selling 75%.`};
+  if(exitScore>=6&&eff>0.005){
+    return{action:'SELL',sellPct:0.75,confidence:7,strategy:'TREND_REVERSAL',
+      signals:exitSigs,reasoning:`Reversal (score ${exitScore}): ${exitSigs.join(', ')}. Selling 75%.`};
   }
-  if(exitScore>=8&&eff<0){
-    return {action:'SELL',sellPct:1.0,confidence:8,strategy:'TREND_REVERSAL',
-      signals:exitSigs,reasoning:`Downtrend confirmed (${exitScore} signals) at loss. Full exit.`};
+  if(exitScore>=7&&eff<0){
+    return{action:'SELL',sellPct:1.0,confidence:8,strategy:'TREND_REVERSAL',
+      signals:exitSigs,reasoning:`Downtrend confirmed at loss. Full exit.`};
   }
-
   return null;
 }
 
@@ -449,12 +455,12 @@ export function calcTotalValue(prices, portfolio, balance) {
   return v;
 }
 
-export function buildMarketSummary(userId, prices, portfolio) {
+export function buildMarketSummary(botKey, prices, portfolio) {
   return COINS.map(({symbol:sym})=>{
-    const px=prices[sym]; if(!px) return '';
-    const ind=computeIndicators(userId,sym),held=portfolio[sym];
-    return `${sym} $${px.price.toFixed(4)}|24H:${px.change24h.toFixed(2)}%|RSI:${ind.rsi?.toFixed(1)||'—'}(${ind.rsiRecovering?'↑':'↓'})|MACD:${ind.macd?.bullish?'BULL':'BEAR'}|BB:${ind.bb?.pct?.toFixed(2)||'—'}|VOL:${ind.volumeRatio.toFixed(2)}x|${ind.regime}${held?`|HELD@$${held.avgCost.toFixed(4)}`:''}`;
+    const px=prices[sym];if(!px)return'';
+    const ind=computeIndicators(botKey,sym),held=portfolio[sym];
+    return `${sym} $${px.price.toFixed(4)}|24H:${px.change24h.toFixed(2)}%|RSI:${ind.rsi?.toFixed(1)||'—'}(${ind.rsiRecovering?'↑':'↓'})|MACD:${ind.macd?.bullish?'BULL':'BEAR'}|BB:${ind.bb?.pct?.toFixed(2)||'—'}|VOL:${ind.volumeRatio.toFixed(2)}x${held?`|HELD@$${held.avgCost.toFixed(4)}`:''}`;
   }).filter(Boolean).join('\n');
 }
 
-export { PAIR_TO_SYM, STRATEGIES };
+export { STRATEGIES };
