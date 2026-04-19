@@ -1,7 +1,3 @@
-/**
- * NEXUS SAAS · Main Server
- */
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -15,6 +11,10 @@ import authRoutes     from './routes/auth.js';
 import billingRoutes  from './routes/billing.js';
 import botRoutes      from './routes/bot.js';
 import exchangeRoutes from './routes/exchanges.js';
+import marketRoutes   from './routes/market.js';
+import aiRoutes       from './routes/ai.js';
+import manualRoutes   from './routes/manual.js';
+import customRoutes   from './routes/customStrategy.js';
 import { setupWebSocket } from './routes/ws.js';
 import { restoreActiveBots } from './services/botManager.js';
 
@@ -25,47 +25,59 @@ const FRONTEND  = process.env.FRONTEND_URL || 'http://localhost:5173';
 const app  = express();
 const http = createServer(app);
 
-// ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({ origin: [FRONTEND, 'http://localhost:5173', 'http://localhost:3000'], credentials: true }));
-
-// Stripe webhook needs raw body — must be before express.json()
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
-// Rate limiting
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { error: 'Too many requests' } });
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: 'Too many auth attempts' } });
+const limiter     = rateLimit({ windowMs: 15*60*1000, max: 200, message: { error: 'Too many requests' } });
+const authLimiter = rateLimit({ windowMs: 15*60*1000, max: 20,  message: { error: 'Too many auth attempts' } });
+const aiLimiter   = rateLimit({ windowMs: 60*1000,    max: 10,  message: { error: 'AI rate limit' } });
+
 app.use('/api/', limiter);
 app.use('/api/auth/', authLimiter);
+app.use('/api/ai/',   aiLimiter);
 
-// ── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth',      authRoutes);
 app.use('/api/billing',   billingRoutes);
 app.use('/api/bot',       botRoutes);
 app.use('/api/exchanges', exchangeRoutes);
+app.use('/api/market',    marketRoutes);
+app.use('/api/ai',        aiRoutes);
+app.use('/api/manual',    manualRoutes);
+app.use('/api/custom',    customRoutes);
 
-app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString(), version: '6.0.0' }));
 
-// ── Serve built frontend ─────────────────────────────────────────────────────
+// Subscription tier info
+app.get('/api/plans', (_, res) => res.json({
+  plans: [
+    {
+      id: 'basic', name: 'Basic', price: 29.99, stripePriceId: process.env.STRIPE_BASIC_PRICE_ID,
+      bots: 1, features: ['1 trading bot', 'PRECISION strategy', 'DCA+ strategy', 'Paper trading', 'Live log', 'Email support'],
+      strategies: ['PRECISION', 'DCA_PLUS'],
+    },
+    {
+      id: 'premium', name: 'Premium', price: 69.99, stripePriceId: process.env.STRIPE_PREMIUM_PRICE_ID,
+      bots: 3, popular: true,
+      features: ['3 trading bots', 'All 7 strategies', 'Custom strategy builder', 'Manual trading', 'AI trading assistant', 'Priority support', 'NXTR rewards', 'Advanced analytics'],
+      strategies: ['PRECISION', 'DCA_PLUS', 'MOMENTUM', 'SWING', 'REVERSAL', 'BREAKOUT', 'AGGRESSIVE'],
+    },
+  ],
+}));
+
 const distPath = path.join(__dirname, '../../frontend/dist');
 app.use(express.static(distPath));
 app.get('*', (_, res) => {
   const idx = path.join(distPath, 'index.html');
   if (fs.existsSync(idx)) res.sendFile(idx);
-  else res.json({ status: 'Frontend not built. Run: cd frontend && npm run build' });
+  else res.json({ status: 'Frontend not built' });
 });
 
-// ── WebSocket ────────────────────────────────────────────────────────────────
 setupWebSocket(http);
-
-// ── Start ────────────────────────────────────────────────────────────────────
 http.listen(PORT, () => {
-  console.log(`\n🚀 NEXUS SAAS running on port ${PORT}`);
-  console.log(`   Frontend: ${FRONTEND}`);
-  console.log(`   API: http://localhost:${PORT}/api\n`);
+  console.log(`\n🚀 NEXUS v6.0 · Port ${PORT}`);
   restoreActiveBots();
 });
-
-process.on('SIGTERM', () => { console.log('Shutting down...'); process.exit(0); });
-process.on('uncaughtException',  e => console.error('Uncaught:', e.message));
-process.on('unhandledRejection', r => console.error('Rejection:', r));
+process.on('SIGTERM', () => process.exit(0));
+process.on('uncaughtException',  e => console.error('[ERROR]', e.message));
+process.on('unhandledRejection', r => console.error('[REJECT]', r));

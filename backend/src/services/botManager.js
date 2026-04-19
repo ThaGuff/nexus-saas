@@ -210,6 +210,12 @@ async function runBotCycle(botId, userId) {
       reasoning:  exit.reasoning,
     };
     await Trades.insert(userId, t, botId).catch(() => {});
+    // Record outcome in learning engine
+    if (pos.avgCost && cur) {
+      const pnlPct = (pnl / (sellQty * pos.avgCost)) * 100;
+      const holdMinutes = pos.entryTime ? Math.round((Date.now() - new Date(pos.entryTime)) / 60000) : 0;
+      recordTrade(botId, bot.strategy, { signals: exit.signals, pnl, pnlPct, holdMinutes });
+    }
     setMem(botId, { balance: updatedBalance, portfolio: updatedPortfolio, peakValue, totalFees: updatedFees });
     ulog(botId, userId, `✅ SELL ${sellQty.toFixed(5)} ${sym} @ $${px.toFixed(4)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(3)} | ${exit.strategy}`, pnl >= 0 ? 'PROFIT' : 'LOSS');
   }
@@ -482,3 +488,4 @@ export { STRATEGY_LIST };
 
 // Import STRATEGIES for minScore reference in logging
 import { STRATEGIES } from './algorithm.js';
+import { recordTrade, getLearningStats } from './learningEngine.js';
