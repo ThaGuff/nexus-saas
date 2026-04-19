@@ -57,6 +57,21 @@ button,input,select,textarea{font-family:inherit}
 @keyframes modal-in{from{opacity:0;transform:scale(0.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .row:hover{background:rgba(255,255,255,0.025)!important}
 .card-hover:hover{border-color:rgba(255,184,0,0.25)!important;transform:translateY(-1px)}
+
+/* Responsive bot grid */
+.bot-grid{display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
+.detail-grid{display:grid;gap:16px;grid-template-columns:1fr 340px}
+.hero-prices{display:flex;gap:10px;flex-wrap:wrap}
+
+@media(max-width:1100px){
+  .bot-grid{grid-template-columns:repeat(2,1fr)!important}
+  .detail-grid{grid-template-columns:1fr 300px!important}
+}
+@media(max-width:700px){
+  .bot-grid{grid-template-columns:1fr!important}
+  .detail-grid{grid-template-columns:1fr!important}
+  .hero-prices{display:none!important}
+}
 `;
 
 const Pill=({c,children,dot})=><span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:20,background:`${c}15`,border:`1px solid ${c}28`,color:c,fontSize:9,fontWeight:600,fontFamily:"'DM Mono',monospace",whiteSpace:'nowrap'}}>{dot&&<span style={{width:5,height:5,borderRadius:'50%',background:c,animation:dot==='pulse'?'breathe 2s infinite':undefined,flexShrink:0}}/>}{children}</span>;
@@ -511,64 +526,72 @@ export default function Dashboard(){
       </nav>
 
       {/* ── PORTFOLIO HERO ── */}
-      <div style={{padding:'20px 16px 16px',borderBottom:`1px solid ${C.b}`,background:C.bg2}}>
-        <div style={{marginBottom:4}}>
-          <div style={{fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:6}}>Total Portfolio</div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:36,letterSpacing:'-0.03em',color:totalPnl>=0?C.green:C.red,lineHeight:1}}>{fu(totalVal)}</div>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
-            <Pill c={totalPnl>=0?C.green:C.red}>{totalPnl>=0?'+':''}{fu(totalPnl)} today</Pill>
-            <Pill c={totalPnl>=0?C.green:C.red}>{fp(bots.reduce((s,b)=>s+(b.pnlPct||0),0)/Math.max(bots.length,1))}</Pill>
-          </div>
-        </div>
+      <div style={{background:C.bg2,borderBottom:`1px solid ${C.b}`}}>
+        <div style={{maxWidth:1200,margin:'0 auto',padding:'20px 20px 20px'}}>
 
-        {/* 2×3 stat grid */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:16}}>
-          {[
-            {icon:'🎯',l:'Win Rate',v:overallWR,c:parseInt(overallWR)>=60?C.green:parseInt(overallWR)>=45?C.amber:C.red},
-            {icon:'📈',l:'Trades',v:totalTrades,c:C.cyan},
-            {icon:'⚡',l:'Running',v:`${running}/${bots.length}`,c:running>0?C.green:C.tx3},
-            {icon:'🔗',l:'Exchanges',v:exchanges.length||'None',c:exchanges.length?C.green:C.tx3},
-            {icon:'💸',l:'Fees Paid',v:fu(bots.reduce((s,b)=>s+(b.totalFees||0),0)),c:C.tx3},
-            {icon:'🤖',l:'Bots',v:`${bots.length}/${maxBots}`,c:C.amber},
-          ].map((s,i)=>(
-            <div key={i} style={{background:C.card,borderRadius:11,padding:'12px 13px',border:`1px solid ${C.b}`}}>
-              <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:5}}>
-                <span style={{fontSize:12}}>{s.icon}</span>
-                <span style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.08em',textTransform:'uppercase'}}>{s.l}</span>
+          {/* Top row: big number + P&L */}
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:20}}>
+            <div>
+              <div style={{fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:8}}>Total Portfolio Value</div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:42,letterSpacing:'-0.03em',color:totalPnl>=0?C.green:C.red,lineHeight:1}}>{fu(totalVal)}</div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+                <Pill c={totalPnl>=0?C.green:C.red}>{totalPnl>=0?'+':''}{fu(totalPnl)} today</Pill>
+                <Pill c={totalPnl>=0?C.green:C.red}>{fp(bots.reduce((s,b)=>s+(b.pnlPct||0),0)/Math.max(bots.length,1))}</Pill>
               </div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:s.c,letterSpacing:'-0.01em'}}>{s.v}</div>
             </div>
-          ))}
-        </div>
+            {/* BTC/ETH/SOL quick prices — right side on desktop */}
+            <div className="hero-prices">
+              {['BTC','ETH','SOL'].map(s=>{const p=prices[s];if(!p)return null;return(
+                <div key={s}style={{background:C.card,borderRadius:12,padding:'12px 16px',border:`1px solid ${C.b}`,minWidth:100,textAlign:'center'}}>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:12,color:CC[s]||C.tx,marginBottom:4}}>{s}</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:600,color:C.tx,marginBottom:3}}>{fu(p.price)}</div>
+                  <div style={{fontSize:10,color:p.change24h>=0?C.green:C.red,fontFamily:"'DM Mono',monospace"}}>{p.change24h>=0?'▲':'▼'}{Math.abs(p.change24h).toFixed(2)}%</div>
+                </div>
+              );})}
+            </div>
+          </div>
 
-        {/* Live price strip — 3 coins visible */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginTop:10}}>
-          {['BTC','ETH','SOL'].map(s=>{const p=prices[s];if(!p)return null;return(
-            <div key={s}style={{background:C.card,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.b}`}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:11,color:CC[s]||C.tx,marginBottom:2}}>{s}</div>
-              <div style={{fontFamily:"'DM Mono',monospace",fontSize:12,fontWeight:500,color:C.tx,marginBottom:2}}>{fu(p.price)}</div>
-              <div style={{fontSize:10,color:p.change24h>=0?C.green:C.red,fontFamily:"'DM Mono',monospace"}}>{p.change24h>=0?'▲':'▼'}{Math.abs(p.change24h).toFixed(2)}%</div>
-            </div>
-          );})}
+          {/* Stat grid — 3 columns on mobile, 6 on desktop, all equal height */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+            {[
+              {icon:'🎯',l:'Win Rate',   v:overallWR,                                            c:parseInt(overallWR)>=60?C.green:parseInt(overallWR)>=45?C.amber:C.red},
+              {icon:'📈',l:'Total Trades',v:totalTrades,                                          c:C.cyan},
+              {icon:'⚡',l:'Running',    v:`${running} of ${bots.length}`,                        c:running>0?C.green:C.tx3},
+              {icon:'🔗',l:'Exchanges',  v:exchanges.length?`${exchanges.length} connected`:'None',c:exchanges.length?C.green:C.tx3},
+              {icon:'💸',l:'Fees Paid',  v:fu(bots.reduce((s,b)=>s+(b.totalFees||0),0)),          c:C.tx3},
+              {icon:'🤖',l:'Bots Active',v:`${bots.length} / ${maxBots}`,                         c:C.amber},
+            ].map((s,i)=>(
+              <div key={i} style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.b}`,display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:14,lineHeight:1}}>{s.icon}</span>
+                  <span style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:600}}>{s.l}</span>
+                </div>
+                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:s.c,letterSpacing:'-0.01em',lineHeight:1}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+
         </div>
       </div>
 
       {/* ── TABS ── */}
-      <div style={{background:C.bg2,borderBottom:`1px solid ${C.b}`,display:'flex',overflowX:'auto',padding:'0 16px',gap:0}}>
-        {TABS.map(t=>(
-          <button key={t}onClick={()=>setTab(t)}style={{background:'transparent',border:'none',padding:'12px 14px',color:tab===t?C.amber:C.tx3,fontSize:11,fontWeight:700,cursor:'pointer',borderBottom:tab===t?`2px solid ${C.amber}`:'2px solid transparent',textTransform:'capitalize',letterSpacing:'0.05em',whiteSpace:'nowrap',transition:'color 0.15s'}}>{t}</button>
-        ))}
+      <div style={{background:C.bg2,borderBottom:`1px solid ${C.b}`}}>
+        <div style={{maxWidth:1200,margin:'0 auto',display:'flex',overflowX:'auto',padding:'0 20px',gap:0}}>
+          {TABS.map(t=>(
+            <button key={t}onClick={()=>setTab(t)}style={{background:'transparent',border:'none',padding:'13px 16px',color:tab===t?C.amber:C.tx3,fontSize:11,fontWeight:700,cursor:'pointer',borderBottom:tab===t?`2px solid ${C.amber}`:'2px solid transparent',textTransform:'capitalize',letterSpacing:'0.05em',whiteSpace:'nowrap',transition:'color 0.15s'}}>{t}</button>
+          ))}
+        </div>
       </div>
 
       {/* ── CONTENT ── */}
-      <div style={{padding:'16px',paddingBottom:100}}>
+      <div style={{maxWidth:1200,margin:'0 auto',padding:'20px',paddingBottom:100}}>
 
         {/* ━━━ BOTS TAB ━━━ */}
         {tab==='bots'&&(
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          <div style={{display:'flex',flexDirection:'column',gap:20}}>
 
-            {/* Bot cards — stacked on mobile, side-by-side on desktop */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:12}}>
+            {/* Bot cards grid — equal columns, never overflow */}
+            <div className="bot-grid">
               {bots.map(bot=>{
                 const isRunning=['running','cycling'].includes(bot.status);
                 const tv=bot.totalValue||bot.balance||0;
@@ -589,29 +612,30 @@ export default function Dashboard(){
                     onClick={()=>setSelBotId(bot.id)}>
 
                     {/* Bot header */}
-                    <div style={{padding:'14px 16px 10px',paddingLeft:18}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-                        <div>
-                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:C.tx,marginBottom:6}}>{bot.name}</div>
+                    <div style={{padding:'16px 16px 12px',paddingLeft:19}}>
+                      {/* Name + value row */}
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:10}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:C.tx,marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{bot.name}</div>
                           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                             <Pill c={sc.c}>{sc.icon} {bot.strategy.replace('_',' ')}</Pill>
                             {bot.leverageEnabled&&<Pill c={C.violet}>⚡{bot.maxLeverage}x</Pill>}
                             <Pill c={bot.botMode==='LIVE'?C.red:C.cyan}>{bot.botMode}</Pill>
-                            {isRunning&&<Pill c={C.green} dot="pulse">RUNNING</Pill>}
+                            {isRunning&&<Pill c={C.green} dot="pulse">LIVE</Pill>}
                           </div>
                         </div>
-                        <div style={{textAlign:'right',flexShrink:0,marginLeft:8}}>
-                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:20,color:pnl>=0?C.green:C.red,letterSpacing:'-0.02em',lineHeight:1}}>{fu(tv)}</div>
-                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:pnl>=0?C.green:C.red,marginTop:3}}>{pnl>=0?'+':''}{fu(pnl)} ({fp(((tv/(bot.startingBalance||100))-1)*100)})</div>
+                        <div style={{textAlign:'right',flexShrink:0}}>
+                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:pnl>=0?C.green:C.red,letterSpacing:'-0.02em',lineHeight:1,whiteSpace:'nowrap'}}>{fu(tv)}</div>
+                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:pnl>=0?C.green:C.red,marginTop:4,whiteSpace:'nowrap'}}>{pnl>=0?'+':''}{fu(pnl)} ({fp(((tv/(bot.startingBalance||100))-1)*100)})</div>
                         </div>
                       </div>
 
-                      {/* 4-stat row */}
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:eqData.length>=2?0:10}}>
+                      {/* 4-stat row — always equal columns */}
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
                         {[['Cash',fu(bot.balance),''],['Win',wr,parseInt(wr)>=50?C.green:parseInt(wr)>0?C.amber:C.tx3],['Trades',bot.trades?.length||0,C.cyan],['Cycles',bot.cycleCount||0,'']].map(([l,v,c])=>(
-                          <div key={l}style={{background:'rgba(255,255,255,0.04)',borderRadius:8,padding:'8px 8px',textAlign:'center'}}>
+                          <div key={l}style={{background:'rgba(255,255,255,0.04)',borderRadius:8,padding:'8px 6px',textAlign:'center'}}>
                             <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:C.tx3,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}>{l}</div>
-                            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:c||C.tx}}>{v}</div>
+                            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:12,color:c||C.tx,overflow:'hidden',textOverflow:'ellipsis'}}>{v}</div>
                           </div>
                         ))}
                       </div>
@@ -657,23 +681,23 @@ export default function Dashboard(){
               {/* Add bot card */}
               {bots.length<maxBots&&(
                 <button onClick={()=>setShowNewBot(true)}
-                  style={{background:'transparent',border:`2px dashed ${C.b2}`,borderRadius:16,padding:'32px 20px',cursor:'pointer',color:C.tx3,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,minHeight:180,transition:'all 0.2s',width:'100%'}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=`${C.amber}44`;e.currentTarget.style.color=C.tx2;}}
+                  style={{background:'transparent',border:`2px dashed ${C.b2}`,borderRadius:16,padding:'32px 20px',cursor:'pointer',color:C.tx3,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,minHeight:220,transition:'all 0.2s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=`${C.amber}55`;e.currentTarget.style.color=C.tx2;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=C.b2;e.currentTarget.style.color=C.tx3;}}>
-                  <div style={{width:44,height:44,borderRadius:12,background:`${C.amber}10`,border:`1px solid ${C.amber}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:C.amber}}>+</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14}}>Add Bot</div>
-                  <div style={{fontSize:11,textAlign:'center',lineHeight:1.5,maxWidth:160}}>Run multiple strategies simultaneously. {maxBots-bots.length} slot{maxBots-bots.length!==1?'s':''} remaining.</div>
+                  <div style={{width:52,height:52,borderRadius:14,background:`${C.amber}12`,border:`1px solid ${C.amber}25`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,color:C.amber}}>+</div>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15}}>Add Bot</div>
+                  <div style={{fontSize:12,textAlign:'center',lineHeight:1.6,maxWidth:180}}>{maxBots-bots.length} slot{maxBots-bots.length!==1?'s':''} remaining. Run multiple strategies simultaneously.</div>
                 </button>
               )}
-            </div>
+            </div>{/* end bot cards grid */}
 
-            {/* Selected bot detail — trade history + open positions */}
+            {/* Selected bot detail — trade history + positions + config */}
             {selBot&&(
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:14,marginTop:4}}>
+              <div className="detail-grid">
 
-                {/* Trade history */}
+                {/* LEFT: Trade history */}
                 <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,overflow:'hidden'}}>
-                  <div style={{padding:'11px 14px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,0.2)'}}>
+                  <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,0.2)'}}>
                     <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:6}}>
                       <span style={{width:4,height:4,borderRadius:'50%',background:C.amber,display:'inline-block'}}/>
                       {selBot.name} · Trade History
@@ -681,19 +705,19 @@ export default function Dashboard(){
                     <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace"}}>{selBot.trades?.length||0} trades</span>
                   </div>
                   {!selBot.trades?.length
-                    ?<div style={{padding:'28px',textAlign:'center',color:C.tx3}}>
-                      <div style={{fontSize:28,marginBottom:8,opacity:0.25}}>🤖</div>
-                      <div style={{fontWeight:600,fontSize:13,color:C.tx2,marginBottom:4}}>No trades yet</div>
-                      <div style={{fontSize:11,lineHeight:1.6}}>Start the bot to begin. History seeds from Binance automatically — expect first trade within 1–2 cycles.</div>
+                    ?<div style={{padding:'36px',textAlign:'center',color:C.tx3}}>
+                      <div style={{fontSize:32,marginBottom:10,opacity:0.2}}>🤖</div>
+                      <div style={{fontWeight:600,fontSize:14,color:C.tx2,marginBottom:6}}>No trades yet</div>
+                      <div style={{fontSize:12,lineHeight:1.7}}>Start the bot to begin trading with the <strong style={{color:C.tx}}>{selBot.strategy}</strong> strategy.</div>
                     </div>
-                    :<div style={{maxHeight:280,overflowY:'auto'}}>
-                      {(selBot.trades||[]).slice(0,60).map((t,i)=>{
+                    :<div style={{maxHeight:360,overflowY:'auto'}}>
+                      {(selBot.trades||[]).slice(0,80).map((t,i)=>{
                         const ac=t.type==='BUY'?C.green:t.pnl>=0?C.cyan:C.red;
-                        return<div key={i}className="row"style={{padding:'9px 14px',borderBottom:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:8,transition:'background 0.1s'}}>
+                        return<div key={i}className="row"style={{padding:'9px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:8,transition:'background 0.1s'}}>
                           <Pill c={ac}>{t.type}</Pill>
-                          <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:11,color:CC[t.coin]||C.tx,minWidth:32}}>{t.coin}</span>
-                          <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace",flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.reasoning?.slice(0,55)}</span>
-                          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0}}>
+                          <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:11,color:CC[t.coin]||C.tx,minWidth:34,flexShrink:0}}>{t.coin}</span>
+                          <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace",flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.reasoning?.slice(0,64)}</span>
+                          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0,gap:1}}>
                             {t.pnl!=null&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:600,color:t.pnl>=0?C.green:C.red}}>{t.pnl>=0?'+':''}{fu(t.pnl)}</span>}
                             <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace"}}>{ft(t.ts)}</span>
                           </div>
@@ -703,21 +727,22 @@ export default function Dashboard(){
                   }
                 </div>
 
-                {/* Open positions + config */}
-                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                {/* RIGHT: Positions + Config stacked */}
+                <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                  {/* Open Positions */}
                   <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,overflow:'hidden'}}>
-                    <div style={{padding:'11px 14px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,0.2)'}}>
+                    <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,0.2)'}}>
                       <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:6}}><span style={{width:4,height:4,borderRadius:'50%',background:C.green,display:'inline-block'}}/>Open Positions</span>
                       <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace"}}>{Object.keys(selBot.portfolio||{}).length} open</span>
                     </div>
                     {!Object.keys(selBot.portfolio||{}).length
-                      ?<div style={{padding:'20px',textAlign:'center',color:C.tx3,fontSize:12}}>No open positions</div>
-                      :<div style={{padding:'4px 0'}}>
+                      ?<div style={{padding:'20px 16px',textAlign:'center',color:C.tx3,fontSize:12}}>No open positions</div>
+                      :<div>
                         {Object.entries(selBot.portfolio||{}).map(([sym,pos])=>{
                           const px=prices[sym]?.price,pv=px?pos.qty*px:0,pp=px?(px-pos.avgCost)*pos.qty:0;
-                          return<div key={sym}style={{padding:'11px 14px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          return<div key={sym}style={{padding:'11px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             <div>
-                              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,color:CC[sym]||C.tx}}>{sym}{pos.leverage>1&&<span style={{fontSize:10,color:C.violet}}> ⚡{pos.leverage}x</span>}</div>
+                              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:CC[sym]||C.tx}}>{sym}{pos.leverage>1&&<span style={{fontSize:9,color:C.violet}}> ⚡{pos.leverage}x</span>}</div>
                               <div style={{fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace",marginTop:2}}>{pos.qty.toFixed(4)} @ {fu(pos.avgCost)}</div>
                             </div>
                             <div style={{textAlign:'right'}}>
@@ -729,21 +754,25 @@ export default function Dashboard(){
                       </div>
                     }
                   </div>
-
-                  {/* Bot config summary */}
-                  <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,padding:'14px'}}>
-                    <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",marginBottom:10,display:'flex',alignItems:'center',gap:5}}><span style={{width:4,height:4,borderRadius:'50%',background:C.amber,display:'inline-block'}}/>Configuration</div>
-                    {[['Strategy',<Pill c={SC[selBot.strategy]?.c||C.cyan}>{selBot.strategy.replace('_',' ')}</Pill>],['Mode',<Pill c={selBot.botMode==='LIVE'?C.red:C.cyan}>{selBot.botMode}</Pill>],['Balance',fu(selBot.balance)],['Stop/Take',`${fp(-selBot.stopLossPct*100)} / ${fp(selBot.takeProfitPct*100)}`],['Max Trade',fu(selBot.maxTradeUSD)],['Leverage',selBot.leverageEnabled?`⚡${selBot.maxLeverage}x`:'Off'],['Cycles',selBot.cycleCount||0]].map(([k,v])=>(
-                      <div key={k}style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${C.b}`,fontSize:12}}>
+                  {/* Config */}
+                  <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,padding:'16px'}}>
+                    <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",marginBottom:12,display:'flex',alignItems:'center',gap:5}}><span style={{width:4,height:4,borderRadius:'50%',background:C.amber,display:'inline-block'}}/>Configuration</div>
+                    {[['Strategy',<Pill c={SC[selBot.strategy]?.c||C.cyan}>{selBot.strategy.replace('_',' ')}</Pill>],['Mode',<Pill c={selBot.botMode==='LIVE'?C.red:C.cyan}>{selBot.botMode}</Pill>],['Balance',fu(selBot.balance)],['Stop / Take',`${fp(-selBot.stopLossPct*100)} / ${fp(selBot.takeProfitPct*100)}`],['Max Trade',fu(selBot.maxTradeUSD)],['Leverage',selBot.leverageEnabled?`⚡ ${selBot.maxLeverage}x`:'Off'],['Cycles',selBot.cycleCount||0]].map(([k,v])=>(
+                      <div key={k}style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.b}`,fontSize:12}}>
                         <span style={{color:C.tx3}}>{k}</span>
                         <span style={{color:C.tx,fontWeight:500}}>{typeof v==='string'||typeof v==='number'?v:<>{v}</>}</span>
                       </div>
                     ))}
-                    <button onClick={()=>setEditBot(selBot)}style={{width:'100%',marginTop:10,padding:'9px',borderRadius:9,border:`1px solid ${C.b2}`,background:'transparent',color:C.tx2,fontSize:12,cursor:'pointer',transition:'all 0.15s'}}>⚙ Configure Bot</button>
+                    <button onClick={()=>setEditBot(selBot)}
+                      style={{width:'100%',marginTop:12,padding:'10px',borderRadius:9,border:`1px solid ${C.b2}`,background:'transparent',color:C.tx2,fontSize:12,cursor:'pointer',fontWeight:600,transition:'all 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor=C.amber}
+                      onMouseLeave={e=>e.currentTarget.style.borderColor=C.b2}>
+                      ⚙ Configure Bot
+                    </button>
                   </div>
                 </div>
               </div>
-            )}
+            )}{/* end selBot detail */}
 
             {/* Empty state */}
             {!bots.length&&(
