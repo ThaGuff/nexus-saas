@@ -10,7 +10,32 @@ import { Users } from '../models/db.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
-const JWT_SECRET  = process.env.JWT_SECRET  || 'dev-secret';
+
+// Simple in-memory lockout (use Redis in production)
+const failedAttempts = new Map(); // email -> { count, lockedUntil }
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+function checkLockout(email) {
+  const record = failedAttempts.get(email);
+  if (!record) return false;
+  if (record.lockedUntil && Date.now() < record.lockedUntil) return true;
+  if (record.lockedUntil && Date.now() >= record.lockedUntil) {
+    failedAttempts.delete(email); return false;
+  }
+  return false;
+}
+function recordFailure(email) {
+  const record = failedAttempts.get(email) || { count: 0 };
+  record.count++;
+  if (record.count >= MAX_ATTEMPTS) record.lockedUntil = Date.now() + LOCKOUT_MS;
+  failedAttempts.set(email, record);
+}
+function clearFailures(email) { failedAttempts.delete(email); }
+
+
+const JWT_SECRET  = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('FATAL: JWT_SECRET env var not set. Generate with: openssl rand -hex 32');
 const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || '7d';
 
 function makeToken(userId) {
@@ -40,11 +65,18 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (checkLockout(email)) {
+      return res.status(429).json({ error: 'Account temporarily locked due to too many failed attempts. Try again in 15 minutes.' });
+    }
     const user = await Users.findByEmail(email);
-    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!user) { recordFailure(email); return res.status(401).json({ error: 'Invalid email or password' }); }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!valid) {
+      recordFailure(email);
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    clearFailures(email);
 
     const token = makeToken(user.id);
     res.json({ token, user: Users.safePublic(user) });

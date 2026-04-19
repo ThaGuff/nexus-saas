@@ -78,6 +78,14 @@ http.listen(PORT, () => {
   console.log(`\n🚀 NEXUS v6.0 · Port ${PORT}`);
   restoreActiveBots();
 });
-process.on('SIGTERM', () => process.exit(0));
+process.on('SIGTERM', async () => {
+  console.log('[Server] SIGTERM received — flushing bot state...');
+  try {
+    const { restoreActiveBots } = await import('./services/botManager.js');
+    // Give bots 3 seconds to sync state to DB
+    await new Promise(r => setTimeout(r, 3000));
+  } catch {}
+  process.exit(0);
+});
 process.on('uncaughtException',  e => console.error('[ERROR]', e.message));
 process.on('unhandledRejection', r => console.error('[REJECT]', r));

@@ -13,7 +13,7 @@ export async function requireAuth(req, res, next) {
 
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
     const user = await Users.findById(payload.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
 

@@ -9,7 +9,8 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router  = express.Router();
 const stripe  = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
-const PRICE_ID = process.env.STRIPE_PRICE_ID || '';
+const BASIC_PRICE_ID   = process.env.STRIPE_BASIC_PRICE_ID   || process.env.STRIPE_PRICE_ID || '';
+const PREMIUM_PRICE_ID = process.env.STRIPE_PREMIUM_PRICE_ID || '';
 const FRONTEND = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // POST /api/billing/checkout — create Stripe checkout session
@@ -31,7 +32,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       customer:    customerId,
       mode:        'subscription',
-      line_items:  [{ price: PRICE_ID, quantity: 1 }],
+      line_items:  [{ price: plan === 'premium' ? PREMIUM_PRICE_ID : BASIC_PRICE_ID, quantity: 1 }],
       success_url: `${FRONTEND}/dashboard?subscribed=true`,
       cancel_url:  `${FRONTEND}/pricing?canceled=true`,
       subscription_data: {
@@ -102,7 +103,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           Users.update(userId, {
             subscriptionId:     sub.id,
             subscriptionStatus: sub.status,
-            plan:               sub.status === 'active' ? 'pro' : 'trial',
+            // Determine plan from price ID
+            const priceId = sub.items?.data?.[0]?.price?.id || '';
+            const planName = priceId === process.env.STRIPE_PREMIUM_PRICE_ID ? 'premium' : priceId === process.env.STRIPE_BASIC_PRICE_ID ? 'basic' : 'basic';
+            plan:               sub.status === 'active' ? planName : 'trial',
           });
         }
         break;
