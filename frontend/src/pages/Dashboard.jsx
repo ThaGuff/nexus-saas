@@ -45,7 +45,7 @@ const fa=iso=>{if(!iso)return'—';const d=(Date.now()-new Date(iso))/1e3;if(d<6
 // ─────────────────────────────────────────────
 const css=`
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:#05070f;color:#e8edf5;font-family:'Space Grotesk',sans-serif}
+html,body{background:#05070f;color:#e8edf5;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font-family:inherit}
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
@@ -82,7 +82,7 @@ const Stat=({label,value,sub,color,icon})=>(
       {icon&&<span style={{fontSize:14}}>{icon}</span>}
       <span style={{color:C.tx3,fontSize:9,fontWeight:600,letterSpacing:'0.12em',textTransform:'uppercase',fontFamily:"'DM Mono',monospace"}}>{label}</span>
     </div>
-    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:22,letterSpacing:'-0.02em',color:color||C.tx,lineHeight:1,marginBottom:4}}>{value}</div>
+    <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,letterSpacing:'-0.02em',color:color||C.tx,lineHeight:1,marginBottom:4}}>{value}</div>
     {sub&&<div style={{color:C.tx3,fontSize:10,fontFamily:"'DM Mono',monospace"}}>{sub}</div>}
   </div>
 );
@@ -123,7 +123,7 @@ const Modal=({title,onClose,children,width=520,footer})=>(
   <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.82)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:16,backdropFilter:'blur(10px)'}}>
     <div style={{background:C.bg3,border:`1px solid ${C.b2}`,borderRadius:20,width:'100%',maxWidth:width,maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,0.7)',animation:'modal-in 0.2s ease-out'}}>
       <div style={{padding:'20px 22px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-        <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:17,color:C.tx}}>{title}</span>
+        <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:17,color:C.tx}}>{title}</span>
         <button onClick={onClose} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${C.b}`,borderRadius:8,width:30,height:30,color:C.tx2,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
       </div>
       <div style={{overflowY:'auto',flex:1,padding:'20px 22px'}}>{children}</div>
@@ -216,7 +216,7 @@ const BotModal=memo(({bot,onClose,onSave,isNew,userPlan,exchanges=[]})=>{
                 style={{background:f.strategy===key?`${s.c}15`:'rgba(255,255,255,0.02)',border:`1.5px solid ${f.strategy===key?s.c:C.b}`,borderRadius:11,padding:'12px 13px',cursor:locked?'not-allowed':'pointer',textAlign:'left',opacity:locked?0.5:1,transition:'all 0.15s',position:'relative'}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
                   <span style={{fontSize:15}}>{s.icon}</span>
-                  <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:12,color:f.strategy===key?s.c:C.tx}}>{key.replace('_',' ')}</span>
+                  <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:12,color:f.strategy===key?s.c:C.tx}}>{key.replace('_',' ')}</span>
                   <span style={{marginLeft:'auto',fontSize:8,padding:'1px 6px',borderRadius:4,background:s.tier==='basic'?'rgba(0,229,160,0.12)':'rgba(255,184,0,0.12)',color:s.tier==='basic'?C.green:C.amber,border:`1px solid ${s.tier==='basic'?C.green+'40':C.amber+'40'}`,fontFamily:"'DM Mono',monospace"}}>{s.tier==='basic'?'FREE':'PRO'}</span>
                 </div>
                 <div style={{fontSize:10,color:C.tx3,lineHeight:1.4}}>{STRAT_DESC[key]?.slice(0,72)}…</div>
@@ -298,9 +298,9 @@ const AIChat=memo(({onClose})=>{
   return(
     <div style={{position:'fixed',bottom:80,right:16,width:'min(380px,calc(100vw-32px))',height:500,background:C.bg3,border:`1px solid ${C.b2}`,borderRadius:18,display:'flex',flexDirection:'column',zIndex:400,boxShadow:'0 20px 60px rgba(0,0,0,0.7)',animation:'slide-up 0.2s ease-out'}}>
       <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:10,background:'rgba(255,184,0,0.04)',borderRadius:'18px 18px 0 0',flexShrink:0}}>
-        <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,color:'#000',boxShadow:`0 0 14px ${C.amber}40`}}>A</div>
+        <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,color:'#000',boxShadow:`0 0 14px ${C.amber}40`}}>A</div>
         <div style={{flex:1}}>
-          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,color:C.tx}}>ARIA</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,color:C.tx}}>ARIA</div>
           <div style={{fontSize:9,color:C.amber,fontFamily:"'DM Mono',monospace"}}>AI Trading Assistant</div>
         </div>
         <button onClick={onClose} style={{background:'none',border:'none',color:C.tx3,fontSize:20,cursor:'pointer',padding:'0 4px'}}>×</button>
@@ -366,14 +366,14 @@ const SettingsModal=memo(({user,plans=[],onClose})=>{
         <div style={{color:C.tx3,fontSize:12,marginBottom:4}}>Choose the plan that's right for you. Upgrade anytime.</div>
         {plans.map(p=>(
           <div key={p.id}style={{border:`1.5px solid ${p.popular?`${C.amber}44`:C.b}`,borderRadius:14,padding:'18px',background:p.popular?`${C.amber}04`:C.card,position:'relative'}}>
-            {p.popular&&<div style={{position:'absolute',top:-10,right:16,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,color:'#000',fontSize:9,fontWeight:800,padding:'3px 12px',borderRadius:20,fontFamily:"'Syne',sans-serif",letterSpacing:'0.05em'}}>MOST POPULAR</div>}
+            {p.popular&&<div style={{position:'absolute',top:-10,right:16,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,color:'#000',fontSize:9,fontWeight:800,padding:'3px 12px',borderRadius:20,fontFamily:"'Inter',sans-serif",letterSpacing:'0.05em'}}>MOST POPULAR</div>}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
               <div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:C.tx,marginBottom:3}}>{p.name}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:18,color:C.tx,marginBottom:3}}>{p.name}</div>
                 <div style={{color:C.tx3,fontSize:12}}>{p.bots} bot{p.bots!==1?'s':''} · {p.bots===1?'Basic strategies':'All 7 strategies'}</div>
               </div>
               <div style={{textAlign:'right'}}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:26,color:p.popular?C.amber:C.tx}}>${p.price}<span style={{fontSize:12,fontWeight:400,color:C.tx3}}>/mo</span></div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:26,color:p.popular?C.amber:C.tx}}>${p.price}<span style={{fontSize:12,fontWeight:400,color:C.tx3}}>/mo</span></div>
               </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,marginBottom:14}}>
@@ -390,9 +390,9 @@ const SettingsModal=memo(({user,plans=[],onClose})=>{
             {[{name:'Basic',price:'29.99',bots:1,features:['1 trading bot','PRECISION strategy','DCA+ strategy','Paper trading','Email support']},
               {name:'Premium',price:'69.99',bots:3,popular:true,features:['3 simultaneous bots','All 7 strategies','Manual trading','AI assistant (ARIA)','Custom strategies','Priority support']}].map(p=>(
               <div key={p.name}style={{border:`1.5px solid ${p.popular?`${C.amber}44`:C.b}`,borderRadius:14,padding:16,background:p.popular?`${C.amber}04`:C.card,textAlign:'left',position:'relative'}}>
-                {p.popular&&<div style={{position:'absolute',top:-9,right:12,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,color:'#000',fontSize:8,fontWeight:800,padding:'2px 10px',borderRadius:20,fontFamily:"'Syne',sans-serif"}}>POPULAR</div>}
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,marginBottom:2}}>{p.name}</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:22,color:p.popular?C.amber:C.tx,marginBottom:10}}>${p.price}<span style={{fontSize:11,fontWeight:400,color:C.tx3}}>/mo</span></div>
+                {p.popular&&<div style={{position:'absolute',top:-9,right:12,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,color:'#000',fontSize:8,fontWeight:800,padding:'2px 10px',borderRadius:20,fontFamily:"'Inter',sans-serif"}}>POPULAR</div>}
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:16,marginBottom:2}}>{p.name}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,color:p.popular?C.amber:C.tx,marginBottom:10}}>${p.price}<span style={{fontSize:11,fontWeight:400,color:C.tx3}}>/mo</span></div>
                 {p.features.map(f=><div key={f}style={{display:'flex',gap:5,fontSize:11,color:C.tx2,marginBottom:4}}><span style={{color:C.green}}>✓</span>{f}</div>)}
               </div>
             ))}
@@ -487,7 +487,7 @@ export default function Dashboard(){
 
   if(authLoading||!user)return(
     <div style={{height:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:C.bg,gap:16}}>
-      <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,color:C.amber}}>NEXUS</div>
+      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:24,color:C.amber}}>NEXUS</div>
       <div style={{color:C.tx3,fontSize:13}}>Loading your dashboard…</div>
       <style>{css}</style>
     </div>
@@ -496,7 +496,7 @@ export default function Dashboard(){
   const TABS=['bots','log','market','news','exchanges','analytics'];
 
   return(
-    <div style={{minHeight:'100vh',background:C.bg,color:C.tx,fontFamily:"'Space Grotesk',sans-serif"}}>
+    <div style={{minHeight:'100vh',background:C.bg,color:C.tx,fontFamily:"'Inter',sans-serif"}}>
       <style>{css}</style>
 
       {showNewBot&&<BotModal isNew onClose={()=>setShowNewBot(false)} onSave={async d=>{await api.createBot(d);setShowNewBot(false);}} userPlan={user?.plan} exchanges={exchanges}/>}
@@ -507,9 +507,9 @@ export default function Dashboard(){
       {/* ── TOP NAV ── */}
       <nav style={{position:'sticky',top:0,zIndex:100,background:'rgba(5,7,15,0.94)',backdropFilter:'blur(20px)',borderBottom:`1px solid ${C.b}`,padding:'0 16px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:'#000',boxShadow:`0 0 14px ${C.amber}35`}}>NX</div>
+          <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:'#000',boxShadow:`0 0 14px ${C.amber}35`}}>NX</div>
           <div>
-            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,lineHeight:1}}>NEX<span style={{color:C.amber}}>US</span></div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:15,lineHeight:1}}>NEX<span style={{color:C.amber}}>US</span></div>
             <div style={{display:'flex',alignItems:'center',gap:4,marginTop:1}}>
               <div style={{width:5,height:5,borderRadius:'50%',background:running>0?C.green:C.tx3,animation:running>0?'breathe 2s infinite':undefined}}/>
               <span style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>{running}/{bots.length} · {connected?'live':'reconnecting'}</span>
@@ -533,7 +533,7 @@ export default function Dashboard(){
           <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:20}}>
             <div>
               <div style={{fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:8}}>Total Portfolio Value</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:42,letterSpacing:'-0.03em',color:totalPnl>=0?C.green:C.red,lineHeight:1}}>{fu(totalVal)}</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:40,letterSpacing:'-0.04em',color:totalPnl>=0?C.green:C.red,lineHeight:1}}>{fu(totalVal)}</div>
               <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
                 <Pill c={totalPnl>=0?C.green:C.red}>{totalPnl>=0?'+':''}{fu(totalPnl)} today</Pill>
                 <Pill c={totalPnl>=0?C.green:C.red}>{fp(bots.reduce((s,b)=>s+(b.pnlPct||0),0)/Math.max(bots.length,1))}</Pill>
@@ -543,7 +543,7 @@ export default function Dashboard(){
             <div className="hero-prices">
               {['BTC','ETH','SOL'].map(s=>{const p=prices[s];if(!p)return null;return(
                 <div key={s}style={{background:C.card,borderRadius:12,padding:'12px 16px',border:`1px solid ${C.b}`,minWidth:100,textAlign:'center'}}>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:12,color:CC[s]||C.tx,marginBottom:4}}>{s}</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:12,color:CC[s]||C.tx,marginBottom:4}}>{s}</div>
                   <div style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:600,color:C.tx,marginBottom:3}}>{fu(p.price)}</div>
                   <div style={{fontSize:10,color:p.change24h>=0?C.green:C.red,fontFamily:"'DM Mono',monospace"}}>{p.change24h>=0?'▲':'▼'}{Math.abs(p.change24h).toFixed(2)}%</div>
                 </div>
@@ -566,7 +566,7 @@ export default function Dashboard(){
                   <span style={{fontSize:14,lineHeight:1}}>{s.icon}</span>
                   <span style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:600}}>{s.l}</span>
                 </div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:s.c,letterSpacing:'-0.01em',lineHeight:1}}>{s.v}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:17,color:s.c,letterSpacing:'-0.02em',lineHeight:1}}>{s.v}</div>
               </div>
             ))}
           </div>
@@ -616,7 +616,7 @@ export default function Dashboard(){
                       {/* Name + value row */}
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:10}}>
                         <div style={{minWidth:0,flex:1}}>
-                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:C.tx,marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{bot.name}</div>
+                          <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:15,color:C.tx,marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{bot.name}</div>
                           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                             <Pill c={sc.c}>{sc.icon} {bot.strategy.replace('_',' ')}</Pill>
                             {bot.leverageEnabled&&<Pill c={C.violet}>⚡{bot.maxLeverage}x</Pill>}
@@ -625,7 +625,7 @@ export default function Dashboard(){
                           </div>
                         </div>
                         <div style={{textAlign:'right',flexShrink:0}}>
-                          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,color:pnl>=0?C.green:C.red,letterSpacing:'-0.02em',lineHeight:1,whiteSpace:'nowrap'}}>{fu(tv)}</div>
+                          <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:17,color:pnl>=0?C.green:C.red,letterSpacing:'-0.03em',lineHeight:1,whiteSpace:'nowrap'}}>{fu(tv)}</div>
                           <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:pnl>=0?C.green:C.red,marginTop:4,whiteSpace:'nowrap'}}>{pnl>=0?'+':''}{fu(pnl)} ({fp(((tv/(bot.startingBalance||100))-1)*100)})</div>
                         </div>
                       </div>
@@ -635,7 +635,7 @@ export default function Dashboard(){
                         {[['Cash',fu(bot.balance),''],['Win',wr,parseInt(wr)>=50?C.green:parseInt(wr)>0?C.amber:C.tx3],['Trades',bot.trades?.length||0,C.cyan],['Cycles',bot.cycleCount||0,'']].map(([l,v,c])=>(
                           <div key={l}style={{background:'rgba(255,255,255,0.04)',borderRadius:8,padding:'8px 6px',textAlign:'center'}}>
                             <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:C.tx3,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}>{l}</div>
-                            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:12,color:c||C.tx,overflow:'hidden',textOverflow:'ellipsis'}}>{v}</div>
+                            <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:12,color:c||C.tx,overflow:'hidden',textOverflow:'ellipsis'}}>{v}</div>
                           </div>
                         ))}
                       </div>
@@ -658,7 +658,7 @@ export default function Dashboard(){
                       const ac=t.type==='BUY'?C.green:t.pnl>=0?C.cyan:C.red;
                       return<div style={{padding:'8px 18px',borderTop:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:8,background:'rgba(0,0,0,0.1)'}}>
                         <Pill c={ac}>{t.type}</Pill>
-                        <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:11,color:CC[t.coin]||C.tx}}>{t.coin}</span>
+                        <span style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:11,color:CC[t.coin]||C.tx}}>{t.coin}</span>
                         <span style={{color:C.tx3,fontSize:10,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.reasoning?.slice(0,50)}</span>
                         {t.pnl!=null&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:600,color:t.pnl>=0?C.green:C.red,flexShrink:0}}>{t.pnl>=0?'+':''}{fu(t.pnl)}</span>}
                       </div>;
@@ -685,7 +685,7 @@ export default function Dashboard(){
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=`${C.amber}55`;e.currentTarget.style.color=C.tx2;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=C.b2;e.currentTarget.style.color=C.tx3;}}>
                   <div style={{width:52,height:52,borderRadius:14,background:`${C.amber}12`,border:`1px solid ${C.amber}25`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,color:C.amber}}>+</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15}}>Add Bot</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15}}>Add Bot</div>
                   <div style={{fontSize:12,textAlign:'center',lineHeight:1.6,maxWidth:180}}>{maxBots-bots.length} slot{maxBots-bots.length!==1?'s':''} remaining. Run multiple strategies simultaneously.</div>
                 </button>
               )}
@@ -715,7 +715,7 @@ export default function Dashboard(){
                         const ac=t.type==='BUY'?C.green:t.pnl>=0?C.cyan:C.red;
                         return<div key={i}className="row"style={{padding:'9px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:8,transition:'background 0.1s'}}>
                           <Pill c={ac}>{t.type}</Pill>
-                          <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:11,color:CC[t.coin]||C.tx,minWidth:34,flexShrink:0}}>{t.coin}</span>
+                          <span style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:11,color:CC[t.coin]||C.tx,minWidth:34,flexShrink:0}}>{t.coin}</span>
                           <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace",flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.reasoning?.slice(0,64)}</span>
                           <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0,gap:1}}>
                             {t.pnl!=null&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:600,color:t.pnl>=0?C.green:C.red}}>{t.pnl>=0?'+':''}{fu(t.pnl)}</span>}
@@ -742,7 +742,7 @@ export default function Dashboard(){
                           const px=prices[sym]?.price,pv=px?pos.qty*px:0,pp=px?(px-pos.avgCost)*pos.qty:0;
                           return<div key={sym}style={{padding:'11px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             <div>
-                              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:CC[sym]||C.tx}}>{sym}{pos.leverage>1&&<span style={{fontSize:9,color:C.violet}}> ⚡{pos.leverage}x</span>}</div>
+                              <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:CC[sym]||C.tx}}>{sym}{pos.leverage>1&&<span style={{fontSize:9,color:C.violet}}> ⚡{pos.leverage}x</span>}</div>
                               <div style={{fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace",marginTop:2}}>{pos.qty.toFixed(4)} @ {fu(pos.avgCost)}</div>
                             </div>
                             <div style={{textAlign:'right'}}>
@@ -778,7 +778,7 @@ export default function Dashboard(){
             {!bots.length&&(
               <div style={{textAlign:'center',padding:'60px 20px'}}>
                 <div style={{fontSize:48,marginBottom:16,opacity:0.2}}>🤖</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:22,marginBottom:8}}>No Bots Yet</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,marginBottom:8}}>No Bots Yet</div>
                 <div style={{color:C.tx3,fontSize:14,lineHeight:1.7,maxWidth:360,margin:'0 auto 24px'}}>Create your first trading bot. Choose a strategy, set your risk parameters, and let NEXUS trade 24/7.</div>
                 <button onClick={()=>setShowNewBot(true)}style={{padding:'12px 28px',borderRadius:11,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,border:'none',color:'#000',fontWeight:700,fontSize:14,cursor:'pointer'}}>+ Create First Bot</button>
               </div>
@@ -823,8 +823,8 @@ export default function Dashboard(){
                 onMouseEnter={e=>e.currentTarget.style.transform='translateY(-2px)'}
                 onMouseLeave={e=>e.currentTarget.style.transform=''}>
                 {held&&<div style={{marginBottom:5}}><Pill c={cc}>HELD</Pill></div>}
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:cc,marginBottom:3}}>{sym}</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,letterSpacing:'-0.01em',marginBottom:5}}>{fu(d.price)}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:cc,marginBottom:3}}>{sym}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,letterSpacing:'-0.01em',marginBottom:5}}>{fu(d.price)}</div>
                 <div style={{display:'inline-flex',alignItems:'center',gap:3,background:d.change24h>=0?'rgba(0,229,160,0.1)':'rgba(255,71,87,0.1)',padding:'2px 8px',borderRadius:20}}>
                   <span style={{fontSize:10,color:d.change24h>=0?C.green:C.red,fontFamily:"'DM Mono',monospace"}}>{d.change24h>=0?'▲':'▼'}{Math.abs(d.change24h).toFixed(2)}%</span>
                 </div>
@@ -849,7 +849,7 @@ export default function Dashboard(){
               {fearGreed?.current&&(()=>{const fi={label:'—',c:C.tx3,...(+fearGreed.current.value<=25?{label:'Extreme Fear',c:'#ff2020'}:+fearGreed.current.value<=45?{label:'Fear',c:'#ff6b35'}:+fearGreed.current.value<=55?{label:'Neutral',c:C.amber}:+fearGreed.current.value<=75?{label:'Greed',c:C.cyan}:{label:'Extreme Greed',c:C.green})};return(
                 <div style={{background:C.card,border:`1px solid ${fi.c}28`,borderRadius:14,padding:'16px',textAlign:'center'}}>
                   <div style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:8}}>Fear & Greed</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:42,color:fi.c,lineHeight:1}}>{fearGreed.current.value}</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:42,color:fi.c,lineHeight:1}}>{fearGreed.current.value}</div>
                   <div style={{color:fi.c,fontSize:12,marginTop:5,marginBottom:10}}>{fi.label}</div>
                   <div style={{display:'flex',gap:3,justifyContent:'center',alignItems:'flex-end',height:28}}>
                     {(fearGreed.history||[]).map((d,i)=>{const h=(+fearGreed.current.value<=25?{c:'#ff2020'}:+fearGreed.current.value<=45?{c:'#ff6b35'}:+fearGreed.current.value<=55?{c:C.amber}:+fearGreed.current.value<=75?{c:C.cyan}:{c:C.green});return<div key={i}style={{width:7,background:fi.c,borderRadius:2,height:`${+d.value/100*28}px`,opacity:i===0?1:0.4}}/>;})}
@@ -926,7 +926,7 @@ export default function Dashboard(){
               {exchanges.map(ex=>(
                 <div key={ex.id}style={{padding:'14px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div>
-                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,marginBottom:4,textTransform:'capitalize'}}>{ex.exchange}</div>
+                    <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:14,marginBottom:4,textTransform:'capitalize'}}>{ex.exchange}</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                       <Pill c={ex.isActive?C.green:C.tx3} dot="pulse">{ex.isActive?'Active':'Inactive'}</Pill>
                       <Pill c={ex.mode==='LIVE'?C.red:C.cyan}>{ex.mode}</Pill>
@@ -956,12 +956,12 @@ export default function Dashboard(){
                 return(
                   <div key={bot.id}style={{background:C.card,border:`1.5px solid ${sc.c}20`,borderRadius:14,overflow:'hidden',boxShadow:`0 0 20px ${sc.c}08`}}>
                     <div style={{padding:'13px 14px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,0.2)'}}>
-                      <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14}}>{bot.name}</span>
+                      <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14}}>{bot.name}</span>
                       <Pill c={sc.c}>{sc.icon} {bot.strategy.replace('_',' ')}</Pill>
                     </div>
                     <div style={{padding:'14px'}}>
                       <div style={{padding:'12px',background:'rgba(255,255,255,0.03)',borderRadius:10,marginBottom:12}}>
-                        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:22,color:pnl>=0?C.green:C.red,letterSpacing:'-0.02em'}}>{fu(tv)}</div>
+                        <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,color:pnl>=0?C.green:C.red,letterSpacing:'-0.02em'}}>{fu(tv)}</div>
                         <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:pnl>=0?C.green:C.red}}>{pnl>=0?'+':''}{fu(pnl)} ({fp(((tv/(bot.startingBalance||100))-1)*100)})</div>
                       </div>
                       {[['Win Rate',wr,parseInt(wr)>=60?C.green:parseInt(wr)>=45?C.amber:C.red],['Total Sells',sells.length,''],['Avg Win',fu(avgWin),C.green],['Avg Loss',fu(-avgLoss),C.red],['Profit Factor',avgLoss>0?(avgWin/avgLoss).toFixed(2):'—',avgWin/avgLoss>=1.5?C.green:C.amber],['Fees Paid',fu(bot.totalFees||0),''],['Cycles',bot.cycleCount||0,''],['Leverage',bot.leverageEnabled?`⚡${bot.maxLeverage}x`:'Off','']].map(([k,v,c])=>(
