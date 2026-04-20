@@ -17,13 +17,13 @@ const DARK={
   navBg:'rgba(5,7,15,0.94)',
 };
 const LIGHT={
-  bg:'#f4f6fb',bg2:'#edf0f7',bg3:'#ffffff',
-  card:'rgba(0,0,0,0.04)',card2:'rgba(0,0,0,0.07)',
-  b:'rgba(0,0,0,0.09)',b2:'rgba(0,0,0,0.15)',
-  amber:'#d97706',amber2:'#b45309',
-  green:'#059669',red:'#dc2626',cyan:'#0284c7',violet:'#7c3aed',
-  tx:'#111827',tx2:'#374151',tx3:'#6b7280',
-  navBg:'rgba(244,246,251,0.95)',
+  bg:'#e8ecf4',bg2:'#dde3ef',bg3:'#f0f4ff',
+  card:'rgba(255,255,255,0.85)',card2:'rgba(255,255,255,0.95)',
+  b:'rgba(0,0,0,0.18)',b2:'rgba(0,0,0,0.28)',
+  amber:'#b45309',amber2:'#92400e',
+  green:'#047857',red:'#b91c1c',cyan:'#0369a1',violet:'#6d28d9',
+  tx:'#0f172a',tx2:'#1e293b',tx3:'#374151',
+  navBg:'rgba(220,227,242,0.97)',
 };
 // Mutable ref — updated at render time so all atoms get current theme
 let C=DARK;
