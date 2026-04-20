@@ -280,50 +280,125 @@ const BotModal=memo(({bot,onClose,onSave,isNew,userPlan,exchanges=[]})=>{
 //  AI CHAT
 // ─────────────────────────────────────────────
 const AIChat=memo(({onClose})=>{
-  const[msgs,setMsgs]=useState([{role:'a',text:"Hi! I'm ARIA, your NEXUS AI assistant. Ask me anything about strategies, indicators, bot setup, or crypto markets."}]);
+  const[msgs,setMsgs]=useState([{role:'a',text:"Hi! I'm ARIA, your PLEX Trader AI assistant. Ask me anything about strategies, technical indicators, bot setup, or how to interpret your current positions."}]);
   const[input,setInput]=useState('');
   const[loading,setLoading]=useState(false);
+  const[aiStatus,setAiStatus]=useState(null); // null=checking, true=ok, false=not configured
   const end=useRef(null);
   useEffect(()=>end.current?.scrollIntoView({behavior:'smooth'}),[msgs]);
 
-  const SUGGESTIONS=['How does PRECISION strategy work?','Best strategy for a bear market?','Explain RSI and stop loss setup','What is a Bollinger Band squeeze?'];
+  // Check if AI is configured on open
+  useEffect(()=>{
+    fetch('/api/ai/status',{headers:{Authorization:`Bearer ${localStorage.getItem('nexus_token')}`}})
+      .then(r=>r.json())
+      .then(d=>setAiStatus(d.configured))
+      .catch(()=>setAiStatus(true)); // assume ok if check fails
+  },[]);
+
+  const SUGGESTIONS=[
+    'How does the MOMENTUM strategy work?',
+    'My bot has 0% win rate — what should I check?',
+    'Explain 20x leverage risk in simple terms',
+    'What is a Bollinger Band squeeze?',
+    'Which strategy is best for a bull market?',
+  ];
 
   async function send(msg){
-    const m=(msg||input).trim();if(!m||loading)return;setInput('');
-    setMsgs(p=>[...p,{role:'u',text:m}]);setLoading(true);
-    try{const r=await api.aiChat(m);setMsgs(p=>[...p,{role:'a',text:r.reply}]);}
-    catch(e){setMsgs(p=>[...p,{role:'a',text:'Error: '+e.message}]);}
+    const m=(msg||input).trim();
+    if(!m||loading)return;
+    setInput('');
+    setMsgs(p=>[...p,{role:'u',text:m}]);
+    setLoading(true);
+    try{
+      const r=await api.aiChat(m);
+      setMsgs(p=>[...p,{role:'a',text:r.reply}]);
+    }catch(e){
+      const errText=e.message||'Unknown error';
+      if(errText.includes('GEMINI_API_KEY')||errText.includes('not configured')||errText.includes('503')){
+        setMsgs(p=>[...p,{role:'a',text:'⚠️ ARIA needs a Gemini API key to work.\n\n**Setup (free, 2 minutes):**\n1. Go to aistudio.google.com\n2. Click "Get API key"\n3. Create a new key\n4. Add it to Railway as `GEMINI_API_KEY`\n5. Redeploy\n\nGemini 1.5 Flash has a generous free tier — no credit card needed.'}]);
+        setAiStatus(false);
+      } else if(errText.includes('rate limit')||errText.includes('429')){
+        setMsgs(p=>[...p,{role:'a',text:'Rate limit hit — Gemini free tier allows 15 requests/minute. Wait a moment and try again.'}]);
+      } else if(errText.includes('Invalid')||errText.includes('API key')){
+        setMsgs(p=>[...p,{role:'a',text:'⚠️ Invalid Gemini API key. Double-check the `GEMINI_API_KEY` value in Railway environment variables.'}]);
+        setAiStatus(false);
+      } else {
+        setMsgs(p=>[...p,{role:'a',text:`Error: ${errText}. Try again.`}]);
+      }
+    }
     setLoading(false);
   }
 
   return(
-    <div style={{position:'fixed',bottom:80,right:16,width:'min(380px,calc(100vw-32px))',height:500,background:C.bg3,border:`1px solid ${C.b2}`,borderRadius:18,display:'flex',flexDirection:'column',zIndex:400,boxShadow:'0 20px 60px rgba(0,0,0,0.7)',animation:'slide-up 0.2s ease-out'}}>
-      <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:10,background:'rgba(255,184,0,0.04)',borderRadius:'18px 18px 0 0',flexShrink:0}}>
-        <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,color:'#000',boxShadow:`0 0 14px ${C.amber}40`}}>A</div>
+    <div style={{position:'fixed',bottom:80,right:16,width:'min(400px,calc(100vw-32px))',height:520,background:C.bg3,border:`1px solid ${C.b2}`,borderRadius:18,display:'flex',flexDirection:'column',zIndex:400,boxShadow:'0 20px 60px rgba(0,0,0,0.7)',animation:'slide-up 0.2s ease-out'}}>
+
+      {/* Header */}
+      <div style={{padding:'13px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',alignItems:'center',gap:10,background:'rgba(255,184,0,0.04)',borderRadius:'18px 18px 0 0',flexShrink:0}}>
+        <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14,color:'#000',boxShadow:`0 0 14px ${C.amber}40`}}>A</div>
         <div style={{flex:1}}>
-          <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,color:C.tx}}>ARIA</div>
-          <div style={{fontSize:9,color:C.amber,fontFamily:"'DM Mono',monospace"}}>AI Trading Assistant</div>
+          <div style={{fontWeight:800,fontSize:14,color:C.tx}}>ARIA</div>
+          <div style={{fontSize:9,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:5}}>
+            {aiStatus===null&&<span style={{color:C.tx3}}>checking…</span>}
+            {aiStatus===true&&<><span style={{width:5,height:5,borderRadius:'50%',background:C.green,display:'inline-block',animation:'breathe 2s infinite'}}/><span style={{color:C.green}}>Gemini 1.5 Flash</span></>}
+            {aiStatus===false&&<><span style={{width:5,height:5,borderRadius:'50%',background:C.red,display:'inline-block'}}/><span style={{color:C.red}}>Not configured</span></>}
+          </div>
         </div>
+        <button onClick={()=>{api.aiClear().catch(()=>{});setMsgs([{role:'a',text:"Conversation cleared. How can I help?"}]);}} title="Clear conversation"
+          style={{background:'none',border:`1px solid ${C.b}`,borderRadius:7,padding:'4px 8px',color:C.tx3,cursor:'pointer',fontSize:10}}>Clear</button>
         <button onClick={onClose} style={{background:'none',border:'none',color:C.tx3,fontSize:20,cursor:'pointer',padding:'0 4px'}}>×</button>
       </div>
+
+      {/* Not configured banner */}
+      {aiStatus===false&&(
+        <div style={{padding:'10px 14px',background:'rgba(255,71,87,0.08)',borderBottom:`1px solid rgba(255,71,87,0.2)`,fontSize:11,color:C.red,lineHeight:1.5,flexShrink:0}}>
+          <strong>Setup required:</strong> Add <code style={{background:'rgba(255,71,87,0.15)',padding:'1px 5px',borderRadius:4}}>GEMINI_API_KEY</code> to Railway env vars.
+          {' '}<a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style={{color:C.amber,textDecoration:'none'}}>Get free key →</a>
+        </div>
+      )}
+
+      {/* Messages */}
       <div style={{flex:1,overflowY:'auto',padding:'14px',display:'flex',flexDirection:'column',gap:10}}>
         {msgs.map((m,i)=>(
           <div key={i} style={{display:'flex',justifyContent:m.role==='u'?'flex-end':'flex-start'}}>
-            <div style={{maxWidth:'85%',padding:'10px 13px',borderRadius:m.role==='u'?'14px 14px 3px 14px':'14px 14px 14px 3px',background:m.role==='u'?`linear-gradient(135deg,${C.amber},${C.amber2})`:'rgba(255,255,255,0.06)',color:m.role==='u'?'#000':C.tx,fontSize:13,lineHeight:1.6}}>{m.text}</div>
+            <div style={{maxWidth:'88%',padding:'10px 13px',borderRadius:m.role==='u'?'14px 14px 3px 14px':'14px 14px 14px 3px',background:m.role==='u'?`linear-gradient(135deg,${C.amber},${C.amber2})`:'rgba(255,255,255,0.06)',color:m.role==='u'?'#000':C.tx,fontSize:12,lineHeight:1.65,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{m.text}</div>
           </div>
         ))}
-        {loading&&<div style={{display:'flex',gap:5,padding:'10px 13px',background:'rgba(255,255,255,0.06)',borderRadius:'14px 14px 14px 3px',width:'fit-content'}}>
-          {[0,1,2].map(i=><div key={i}style={{width:6,height:6,borderRadius:'50%',background:C.amber,animation:`breathe 1.2s ${i*0.2}s infinite`}}/>)}
-        </div>}
+        {loading&&(
+          <div style={{display:'flex',gap:5,padding:'10px 13px',background:'rgba(255,255,255,0.06)',borderRadius:'14px 14px 14px 3px',width:'fit-content',alignItems:'center'}}>
+            {[0,1,2].map(i=><div key={i}style={{width:6,height:6,borderRadius:'50%',background:C.amber,animation:`breathe 1.2s ${i*0.2}s infinite`}}/>)}
+            <span style={{fontSize:10,color:C.tx3,marginLeft:4}}>ARIA is thinking…</span>
+          </div>
+        )}
         <div ref={end}/>
       </div>
-      {msgs.length===1&&<div style={{padding:'0 14px 10px',display:'flex',flexDirection:'column',gap:5,flexShrink:0}}>
-        {SUGGESTIONS.map(s=><button key={s}onClick={()=>send(s)}style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1px solid ${C.b}`,background:C.card,color:C.tx3,fontSize:11,cursor:'pointer',lineHeight:1.4,transition:'all 0.15s'}}>{s}</button>)}
-      </div>}
+
+      {/* Suggestions (first message only) */}
+      {msgs.length===1&&(
+        <div style={{padding:'0 14px 10px',display:'flex',flexDirection:'column',gap:5,flexShrink:0}}>
+          <div style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.08em',marginBottom:2}}>SUGGESTED QUESTIONS</div>
+          {SUGGESTIONS.map(s=>(
+            <button key={s} onClick={()=>send(s)}
+              style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1px solid ${C.b}`,background:C.card,color:C.tx3,fontSize:11,cursor:'pointer',lineHeight:1.4,transition:'all 0.15s'}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.amber;e.currentTarget.style.color=C.tx;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.b;e.currentTarget.style.color=C.tx3;}}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
       <div style={{padding:'12px 14px',borderTop:`1px solid ${C.b}`,display:'flex',gap:8,flexShrink:0}}>
-        <input value={input}onChange={e=>setInput(e.target.value)}onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()}placeholder="Ask ARIA anything…"
-          style={{flex:1,background:'rgba(0,0,0,0.3)',border:`1px solid ${C.b2}`,borderRadius:9,padding:'10px 13px',color:C.tx,fontSize:13,outline:'none'}}/>
-        <button onClick={()=>send()} disabled={!input.trim()||loading} style={{padding:'10px 16px',borderRadius:9,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,border:'none',color:'#000',fontWeight:700,fontSize:12,cursor:'pointer',opacity:!input.trim()||loading?0.4:1}}>↑</button>
+        <input
+          value={input}
+          onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()}
+          placeholder={aiStatus===false?'Configure API key first…':'Ask ARIA anything…'}
+          disabled={aiStatus===false}
+          style={{flex:1,background:'rgba(0,0,0,0.3)',border:`1px solid ${C.b2}`,borderRadius:9,padding:'10px 13px',color:C.tx,fontSize:13,outline:'none',opacity:aiStatus===false?0.5:1}}
+        />
+        <button onClick={()=>send()} disabled={!input.trim()||loading||aiStatus===false}
+          style={{padding:'10px 16px',borderRadius:9,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,border:'none',color:'#000',fontWeight:700,fontSize:14,cursor:'pointer',opacity:(!input.trim()||loading||aiStatus===false)?0.35:1,transition:'opacity 0.15s'}}>↑</button>
       </div>
     </div>
   );
@@ -445,14 +520,34 @@ export default function Dashboard(){
   const[drawer,setDrawer]=useState(null); // 'winrate' | 'trades' | 'fees'
   const logRef=useRef(null);
 
+  // ── Data fetching + auto-refresh ──────────────────────────────────────────
   useEffect(()=>{
     if(!authLoading&&!user){nav('/login');return;}
     if(!user)return;
+
+    // Initial loads
     api.exchanges().then(d=>setExchanges(d.exchanges||[])).catch(()=>{});
     api.plans().then(d=>setPlans(d.plans||[])).catch(()=>{});
     api.news().then(d=>setNews(d.articles||[])).catch(()=>{});
     api.fearGreed().then(setFearGreed).catch(()=>{});
     api.globalMkt().then(setGlobalMkt).catch(()=>{});
+
+    // News: refresh every 10 minutes
+    const newsTimer = setInterval(()=>{
+      api.news().then(d=>{ if(d.articles?.length) setNews(d.articles); }).catch(()=>{});
+    }, 10 * 60 * 1000);
+
+    // Fear & Greed: refresh every 15 minutes
+    const fgTimer = setInterval(()=>{
+      api.fearGreed().then(setFearGreed).catch(()=>{});
+    }, 15 * 60 * 1000);
+
+    // Global market stats: refresh every 5 minutes
+    const gTimer = setInterval(()=>{
+      api.globalMkt().then(setGlobalMkt).catch(()=>{});
+    }, 5 * 60 * 1000);
+
+    return ()=>{ clearInterval(newsTimer); clearInterval(fgTimer); clearInterval(gTimer); };
   },[user,authLoading]);
 
   useEffect(()=>{if(!selBotId&&bots.length)setSelBotId(bots[0].id);},[bots,selBotId]);
@@ -1072,7 +1167,12 @@ export default function Dashboard(){
             <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,overflow:'hidden'}}>
               <div style={{padding:'11px 14px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,0,0,0.2)'}}>
                 <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:6}}><span style={{width:4,height:4,borderRadius:'50%',background:C.amber,display:'inline-block'}}/>Crypto News</span>
-                <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace"}}>Live · CryptoPanic</span>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{color:C.tx3,fontSize:9,fontFamily:"'DM Mono',monospace"}}>Live · CryptoPanic + CoinGecko</span>
+                  <button onClick={()=>api.news().then(d=>{if(d.articles?.length)setNews(d.articles);}).catch(()=>{})}
+                    style={{background:'transparent',border:`1px solid ${C.b}`,borderRadius:6,padding:'3px 8px',color:C.tx3,cursor:'pointer',fontSize:9,fontFamily:"'DM Mono',monospace"}}
+                    title="Refresh news">↺</button>
+                </div>
               </div>
               {!news.length&&<div style={{padding:24,textAlign:'center',color:C.tx3,fontSize:12}}>Loading news…</div>}
               {news.map(a=>(

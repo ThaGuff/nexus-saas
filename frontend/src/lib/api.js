@@ -44,6 +44,7 @@ export const api = {
   // AI assistant
   aiChat:     msg => req('POST', '/ai/chat', { message: msg }),
   aiClear:    () => req('DELETE', '/ai/chat'),
+  aiStatus:   () => req('GET', '/ai/status'),
 
   // Manual trading
   manualTrade: b => req('POST', '/manual/trade', b),
