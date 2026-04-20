@@ -23,7 +23,7 @@ import { broadcastToUser } from '../routes/ws.js';
 const MAX_BOTS = 3;
 const FEE      = 0.006;
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
 
 // In-memory state
 const botTimers    = new Map(); // botId → IntervalId

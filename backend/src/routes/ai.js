@@ -13,7 +13,7 @@ const convHistory = new Map();
 // Build URL per-request — never stale even if env var set after boot
 function geminiUrl() {
   const key = process.env.GEMINI_API_KEY || '';
-  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+  return `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${key}`;
 }
 
 router.post('/chat', requireAuth, async (req, res) => {
