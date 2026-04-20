@@ -19,6 +19,7 @@ import {
 } from './algorithm.js';
 import { recordTrade, getLearningStats } from './learningEngine.js';
 import { Users, Bots, Trades, BotLogs } from '../models/db.js';
+import { getAdapter, EXCHANGE_FEES, getLiveBalances } from './exchanges/index.js';
 import { broadcastToUser } from '../routes/ws.js';
 
 const MAX_BOTS = 3;
@@ -54,7 +55,8 @@ const cycleTimeouts = new Map(); // watchdog timers
 const sharedPriceCache = new Map(); // userId → { prices, ts }
 const SHARED_PRICE_TTL = 45000; // 45s — within one cycle window
 
-function getFeeRate(botMode) {
+function getFeeRate(botMode, exchangeName=null) {
+  if (exchangeName && EXCHANGE_FEES[exchangeName]) return EXCHANGE_FEES[exchangeName];
   return botMode === 'LIVE' ? LIVE_FEE_RATE : PAPER_FEE_RATE;
 }
 
@@ -291,8 +293,21 @@ async function runBotCycle(botId, userId) {
       recordTrade(botId, bot.strategy, { signals:exit.signals, pnl, pnlPct, holdMinutes });
 
       setMem(botId, { balance:updatedBalance, portfolio:updatedPortfolio, peakValue, totalFees:updatedFees });
+      // ── PHASE 2: LIVE SELL EXECUTION ────────────────────────────────
+      if (adapter && bot.botMode === 'LIVE') {
+        try {
+          const sellNotional = sellQty * px;
+          ulog(botId, userId, `📡 Placing LIVE SELL: ${sellQty.toFixed(4)} ${sym} ($${sellNotional.toFixed(2)}) on ${exchangeName}`, 'SYSTEM');
+          const fill = await adapter.placeMarketOrder(sym, 'SELL', sellNotional);
+          ulog(botId, userId, `✅ LIVE SELL filled @ $${fill.avgPrice?.toFixed(2)||px.toFixed(2)} | Order: ${fill.orderId}`, 'SYSTEM');
+        } catch(e) {
+          ulog(botId, userId, `❌ LIVE SELL FAILED: ${e.message}`, 'ERROR');
+          // Continue with paper accounting even if live order failed — alert user
+        }
+      }
+
       ulog(botId, userId,
-        `${pnl>=0?'✅':'❌'} SELL ${sellQty.toFixed(4)} ${sym} @ $${px.toFixed(2)} | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)} | Fee: $${fee.toFixed(3)} (${(FEE*100).toFixed(2)}%) | ${exit.strategy}`,
+        `${pnl>=0?'✅':'❌'} SELL ${sellQty.toFixed(4)} ${sym} @ $${px.toFixed(2)} | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(2)} | Fee: $${fee.toFixed(3)} (${(FEE*100).toFixed(2)}%) | ${exit.strategy} | ${exchangeName}`,
         pnl>=0?'PROFIT':'LOSS');
     }
 
@@ -382,12 +397,29 @@ async function runBotCycle(botId, userId) {
                 };
               }
 
+              // ── PHASE 2: LIVE ORDER EXECUTION ──────────────────────────
+              let actualQty = qty, actualPrice = px, actualFee = fee;
+              if (adapter && bot.botMode === 'LIVE') {
+                try {
+                  ulog(botId, userId, `📡 Placing LIVE ${side||'BUY'} order: ${best.symbol} $${margin.toFixed(2)} on ${exchangeName}`, 'SYSTEM');
+                  const fill = await adapter.placeMarketOrder(best.symbol, 'BUY', margin * lev);
+                  if (fill.avgPrice) { actualPrice = fill.avgPrice; actualQty = fill.qty || (margin*lev/fill.avgPrice); }
+                  if (fill.fee) { actualFee = fill.fee; }
+                  ulog(botId, userId, `✅ LIVE fill: ${actualQty.toFixed(4)} ${best.symbol} @ $${actualPrice.toFixed(2)} | Fee: $${actualFee.toFixed(3)} | Order: ${fill.orderId}`, 'SYSTEM');
+                } catch(e) {
+                  ulog(botId, userId, `❌ LIVE order FAILED: ${e.message} — aborting trade`, 'ERROR');
+                  setMem(botId, { status:'running' });
+                  return;
+                }
+              }
+
               const t = {
-                type:'BUY', coin:best.symbol, qty, price:px,
-                gross:margin, notional, fee, netProceeds:margin-fee,
-                leverage:lev, feeRate:FEE,
+                type:'BUY', coin:best.symbol, qty:actualQty, price:actualPrice,
+                gross:margin, notional, fee:actualFee, netProceeds:margin-actualFee,
+                leverage:lev, feeRate:FEE, exchange:exchangeName,
                 strategy:best.strategy, confidence:Math.round(best.confidence||8),
                 signals:best.signals, reasoning,
+                source: bot.botMode === 'LIVE' ? 'LIVE' : 'PAPER',
               };
               await Trades.insert(userId, t, botId).catch(e=>ulog(botId,userId,`Trade insert: ${e.message}`,'ERROR'));
               setCooldown(botId, best.symbol, cycleNum);
