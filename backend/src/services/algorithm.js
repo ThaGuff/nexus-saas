@@ -231,13 +231,13 @@ const STRATEGIES = {
    * Key change: RSI MUST be rising (no buying falling knives)
    */
   PRECISION: {
-    name:'Precision', minScore:10,
+    name:'Precision', minScore:8,
     description:'RSI recovering + MACD bull + BB lower. All three required. High conviction only.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
 
-      // GATE 1: RSI below 48 — oversold/neutral range
-      if(ind.rsi===null||ind.rsi>48) return{score:-1,sigs:['GATE:RSI_TOO_HIGH'],strategy:'PRECISION'};
+      // GATE 1: RSI below 52 — oversold/neutral range
+      if(ind.rsi===null||ind.rsi>52) return{score:-1,sigs:['GATE:RSI_TOO_HIGH'],strategy:'PRECISION'};
 
       // GATE 2: RSI MUST be rising — never buy a falling knife
       if(!ind.rsiUp) return{score:-1,sigs:['GATE:RSI_FALLING'],strategy:'PRECISION'};
@@ -245,8 +245,7 @@ const STRATEGIES = {
       // GATE 3: Not in bear trend
       if(ind.isBearTrend&&ind.rsi>30) return{score:-1,sigs:['GATE:BEAR_TREND'],strategy:'PRECISION'};
 
-      // GATE 4: Volume must be present
-      if(ind.volumeRatio<0.7) return{score:-1,sigs:['GATE:NO_VOLUME'],strategy:'PRECISION'};
+      // Volume bonus/penalty instead of hard gate
 
       // RSI scoring — heavily weighted toward truly oversold + rising
       if(ind.rsi<20){score+=9;sigs.push(`RSI_PANIC(${ind.rsi.toFixed(0)})↑`);}
@@ -255,18 +254,19 @@ const STRATEGIES = {
       else if(ind.rsi<42){score+=3;sigs.push(`RSI_LOW(${ind.rsi.toFixed(0)})↑`);}
       else{score+=1;sigs.push(`RSI_NEUTRAL(${ind.rsi.toFixed(0)})↑`);}
 
-      // MACD — must be bullish or turning
-      if(!ind.macd)return{score:-1,sigs:['GATE:NO_MACD'],strategy:'PRECISION'};
-      if(ind.macd.bullish&&ind.macd.histogram>0){score+=5;sigs.push('MACD_BULL✓');}
+      // MACD — bonus for bullish, penalty for bearish
+      if(!ind.macd){score-=2;sigs.push('NO_MACD');}
+      else if(ind.macd.bullish&&ind.macd.histogram>0){score+=5;sigs.push('MACD_BULL✓');}
       else if(ind.macd.histogram>-0.001){score+=1;sigs.push('MACD_TURNING');}
-      else{return{score:-1,sigs:['GATE:MACD_BEARISH'],strategy:'PRECISION'};}
+      else{score-=3;sigs.push('MACD_BEAR⚠');}
 
-      // BB — price MUST be in lower half
-      if(!ind.bb)return{score:-1,sigs:['GATE:NO_BB'],strategy:'PRECISION'};
-      if(ind.bb.pct<-0.8){score+=6;sigs.push('BB_EXTREME_LOW✓');}
+      // BB — strongly prefer lower half, penalize upper
+      if(!ind.bb){score-=1;sigs.push('NO_BB');}
+      else if(ind.bb.pct<-0.8){score+=6;sigs.push('BB_EXTREME_LOW✓');}
       else if(ind.bb.pct<-0.5){score+=4;sigs.push('BB_LOWER✓');}
       else if(ind.bb.pct<-0.2){score+=2;sigs.push('BB_BELOW_MID');}
-      else{return{score:-1,sigs:['GATE:PRICE_ABOVE_MID_BB'],strategy:'PRECISION'};}
+      else if(ind.bb.pct<0.3){score+=0;sigs.push('BB_MID');}
+      else{score-=3;sigs.push('BB_UPPER⚠');}
 
       // StochRSI bonus
       if(ind.stochRSI!==null&&ind.stochRSI<15){score+=4;sigs.push(`STOCH_PANIC(${ind.stochRSI.toFixed(0)})`);}
@@ -290,7 +290,7 @@ const STRATEGIES = {
    * Key change: requires stronger EMA cascade + volume confirmation
    */
   MOMENTUM: {
-    name:'Momentum', minScore:10,
+    name:'Momentum', minScore:8,
     description:'Full EMA cascade + RSI 45-65 + rising volume. Trend-following only.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
@@ -303,11 +303,11 @@ const STRATEGIES = {
       if(ind.ema9<=ind.ema21) return{score:-1,sigs:['GATE:EMA9_BELOW_21'],strategy:'MOMENTUM'};
       if(ind.ema21<=ind.ema50) return{score:-1,sigs:['GATE:EMA21_BELOW_50'],strategy:'MOMENTUM'};
 
-      // GATE 3: RSI must be rising or flat (no buying declining momentum)
-      if(ind.rsiDn) return{score:-1,sigs:['GATE:RSI_DECLINING'],strategy:'MOMENTUM'};
+      // GATE 3: RSI declining = penalty not hard gate
+      if(ind.rsiDn){score-=2;sigs.push('RSI_DECLINING⚠');}
 
-      // GATE 4: Volume must support the move
-      if(ind.volumeRatio<1.1) return{score:-1,sigs:['GATE:WEAK_VOLUME'],strategy:'MOMENTUM'};
+      // GATE 4: Low volume = small penalty
+      if(ind.volumeRatio<0.8){score-=2;sigs.push('LOW_VOL⚠');}
 
       // EMA cascade quality
       const trend=(ind.ema21-ind.ema50)/ind.ema50*100;
@@ -316,9 +316,10 @@ const STRATEGIES = {
       else{score+=2;sigs.push(`WEAK_TREND(+${trend.toFixed(1)}%)`);}
       score+=2;sigs.push('EMA9>21>50✓');
 
-      // MACD must confirm
-      if(!ind.macd||!ind.macd.bullish) return{score:-1,sigs:['GATE:MACD_NOT_BULL'],strategy:'MOMENTUM'};
-      if(ind.macd.histogram>0){score+=4;sigs.push('MACD_BULL✓');}
+      // MACD bonus
+      if(ind.macd?.bullish&&ind.macd?.histogram>0){score+=4;sigs.push('MACD_BULL✓');}
+      else if(ind.macd?.histogram>0){score+=2;sigs.push('MACD+');}
+      else if(!ind.macd?.bullish){score-=1;}
       else{score+=1;}
 
       // RSI momentum quality
@@ -328,7 +329,7 @@ const STRATEGIES = {
       // Momentum
       if(ind.mom10!==null&&ind.mom10>3){score+=4;sigs.push(`MOM10(+${ind.mom10.toFixed(1)}%)`);}
       else if(ind.mom10!==null&&ind.mom10>1){score+=2;sigs.push('MOM10+');}
-      else if(ind.mom10!==null&&ind.mom10<0){return{score:-1,sigs:['GATE:NEGATIVE_MOMENTUM'],strategy:'MOMENTUM'};}
+      else if(ind.mom10!==null&&ind.mom10<0){score-=2;sigs.push('MOM_NEG⚠');}
 
       if(ind.mom5!==null&&ind.mom5>0.5){score+=1;sigs.push('MOM5+');}
 
@@ -349,13 +350,13 @@ const STRATEGIES = {
    * Key change: RSI MUST be rising, multiple bottom signals required
    */
   REVERSAL: {
-    name:'Mean Reversion', minScore:11,
+    name:'Mean Reversion', minScore:9,
     description:'Extreme oversold (RSI<30) + BB lower + RSI turning up. High R:R.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
 
-      // GATE 1: RSI must be genuinely extreme
-      if(ind.rsi===null||ind.rsi>32) return{score:-1,sigs:['GATE:RSI_NOT_EXTREME'],strategy:'REVERSAL'};
+      // GATE 1: RSI genuinely oversold
+      if(ind.rsi===null||ind.rsi>38) return{score:-1,sigs:['GATE:RSI_NOT_EXTREME'],strategy:'REVERSAL'};
 
       // GATE 2: RSI MUST be rising — don't catch falling knives
       if(!ind.rsiUp) return{score:-1,sigs:['GATE:RSI_STILL_FALLING'],strategy:'REVERSAL'};
@@ -363,8 +364,8 @@ const STRATEGIES = {
       // GATE 3: BB must confirm extreme oversold
       if(!ind.bb||ind.bb.pct>-0.4) return{score:-1,sigs:['GATE:NOT_AT_BB_LOWER'],strategy:'REVERSAL'};
 
-      // GATE 4: StochRSI must be in panic zone
-      if(ind.stochRSI!==null&&ind.stochRSI>35) return{score:-1,sigs:['GATE:STOCH_NOT_PANIC'],strategy:'REVERSAL'};
+      // StochRSI bonus rather than hard gate
+      if(ind.stochRSI!==null&&ind.stochRSI>55){score-=2;sigs.push('STOCH_HIGH⚠');}
 
       // RSI extreme scoring
       if(ind.rsi<15){score+=12;sigs.push(`RSI_CAPITULATION(${ind.rsi.toFixed(0)})↑`);}
@@ -401,7 +402,7 @@ const STRATEGIES = {
    * Key change: Price must already be breaking up (above midband) + strong volume
    */
   BREAKOUT: {
-    name:'Breakout', minScore:11,
+    name:'Breakout', minScore:9,
     description:'BB squeeze + volume explosion + price above midband. Directional only.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
@@ -409,8 +410,8 @@ const STRATEGIES = {
       // GATE 1: BB must be squeezed
       if(!ind.bb||ind.bb.width>0.05) return{score:-1,sigs:['GATE:NO_SQUEEZE'],strategy:'BREAKOUT'};
 
-      // GATE 2: Strong volume required
-      if(ind.volumeRatio<1.8) return{score:-1,sigs:['GATE:VOLUME_INSUFFICIENT'],strategy:'BREAKOUT'};
+      // GATE 2: Volume required
+      if(ind.volumeRatio<1.4) return{score:-1,sigs:['GATE:VOLUME_INSUFFICIENT'],strategy:'BREAKOUT'};
 
       // GATE 3: Price must be breaking UP (above midband) — only trade upward breakouts
       if(ind.bb.pct<0.1) return{score:-1,sigs:['GATE:NOT_BREAKING_UP'],strategy:'BREAKOUT'};
@@ -453,7 +454,7 @@ const STRATEGIES = {
    * Key change: Must have strong trend + RSI recovering from pullback
    */
   SWING: {
-    name:'Swing Trade', minScore:10,
+    name:'Swing Trade', minScore:8,
     description:'Strong uptrend pullback (EMA21>EMA50) + RSI recovering in 32-50 zone.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
@@ -465,11 +466,11 @@ const STRATEGIES = {
       const trendPct=(ind.ema21-ind.ema50)/ind.ema50*100;
       if(trendPct<1.5) return{score:-1,sigs:['GATE:WEAK_TREND'],strategy:'SWING'};
 
-      // GATE 3: RSI in pullback zone — tighter range now
-      if(ind.rsi===null||ind.rsi<30||ind.rsi>52) return{score:-1,sigs:['GATE:RSI_NOT_PULLBACK'],strategy:'SWING'};
+      // GATE 3: RSI in pullback zone — broader range
+      if(ind.rsi===null||ind.rsi<26||ind.rsi>58) return{score:-1,sigs:['GATE:RSI_NOT_PULLBACK'],strategy:'SWING'};
 
-      // GATE 4: RSI must be recovering (rising from pullback)
-      if(!ind.rsiUp) return{score:-1,sigs:['GATE:RSI_NOT_RECOVERING'],strategy:'SWING'};
+      // GATE 4: RSI falling hard = reject; flat or rising = ok
+      if(ind.rsiDn&&ind.rsi>45) return{score:-1,sigs:['GATE:RSI_FALLING'],strategy:'SWING'};
 
       // GATE 5: EMA9 must still be above EMA21 (trend intact)
       if(ind.ema9&&ind.ema21&&ind.ema9<ind.ema21*0.998) return{score:-1,sigs:['GATE:EMA9_UNDER_21'],strategy:'SWING'};
@@ -505,16 +506,16 @@ const STRATEGIES = {
    * Key change: Requires multiple catalyst signals, RSI must support direction
    */
   AGGRESSIVE: {
-    name:'Aggressive', minScore:11,
+    name:'Aggressive', minScore:9,
     description:'Strong catalyst (vol>3x OR extreme dip+recovery). Multiple confirms required.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
       const chg=prices[sym]?.change24h||0;
 
       // GATE 1: Must have strong catalyst
-      const extremeVol     = ind.volumeRatio>3.0;
+      const extremeVol     = ind.volumeRatio>2.5;
       const extremeDip     = chg<-7&&ind.rsiUp&&ind.rsi<35;
-      const momentumBurst  = chg>7&&ind.volumeRatio>2.5&&ind.rsiUp;
+      const momentumBurst  = chg>5&&ind.volumeRatio>2.0&&ind.rsiUp;
       const panicBottom    = ind.rsi!==null&&ind.rsi<22&&ind.volumeRatio>2&&ind.rsiUp;
 
       if(!extremeVol&&!extremeDip&&!momentumBurst&&!panicBottom){
@@ -572,11 +573,11 @@ const STRATEGIES = {
       // GATE 3: RSI below 50
       if(ind.rsi!==null&&ind.rsi>50) return{score:-1,sigs:['GATE:RSI_TOO_HIGH'],strategy:'DCA_PLUS'};
 
-      // GATE 4: RSI must be rising (recovering from dip)
-      if(!ind.rsiUp&&ind.rsi!==null&&ind.rsi>25) return{score:-1,sigs:['GATE:RSI_NOT_RECOVERING'],strategy:'DCA_PLUS'};
+      // GATE 4: RSI rising preferred; only block if falling hard from overbought
+      if(ind.rsiDn&&ind.rsi!==null&&ind.rsi>45) return{score:-1,sigs:['GATE:RSI_FALLING_FROM_HIGH'],strategy:'DCA_PLUS'};
 
-      // GATE 5: Not in full bear trend
-      if(ind.isBearTrend&&ind.rsi>30) return{score:-1,sigs:['GATE:BEAR_TREND'],strategy:'DCA_PLUS'};
+      // Bear trend = small penalty
+      if(ind.isBearTrend&&ind.rsi>35){score-=2;sigs.push('BEAR_TREND⚠');}
 
       // Tier bonus (all tier 1 now)
       score+=4;sigs.push('TIER1_BLUECHIP✓');

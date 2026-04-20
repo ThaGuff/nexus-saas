@@ -27,18 +27,18 @@ export default function Terms() {
         <div style={{ background:`${C.red}12`, border:`2px solid ${C.red}44`, borderRadius:10, padding:'24px', marginBottom:48 }}>
           <h2 style={{ color:C.red, fontSize:16, fontWeight:800, marginBottom:12 }}>⚠ CRITICAL RISK WARNING — READ BEFORE USING</h2>
           <p style={{ color:'#d4a0a0', fontSize:14, lineHeight:1.8, marginBottom:10 }}>
-            <strong>Cryptocurrency trading carries an extremely high risk of financial loss.</strong> The automated trading features of NEXUS execute real financial transactions on your behalf. You may lose your entire investment. Do not invest funds you cannot afford to lose.
+            <strong>Cryptocurrency trading carries an extremely high risk of financial loss.</strong> The automated trading features of PLEX Trader executes real financial transactions on your behalf. You may lose your entire investment. Do not invest funds you cannot afford to lose.
           </p>
           <p style={{ color:'#d4a0a0', fontSize:14, lineHeight:1.8, marginBottom:10 }}>
             <strong>PLEX Trader is not a licensed financial adviser, broker, investment manager, or registered investment adviser.</strong> Nothing in this Service constitutes financial, investment, legal, or tax advice. All trading decisions are made by automated algorithms with no human oversight.
           </p>
           <p style={{ color:'#d4a0a0', fontSize:14, lineHeight:1.8 }}>
-            <strong>PLEX Automation and its operators accept no responsibility or liability for any financial losses, trading losses, or consequential damages arising from use of this Service.</strong> By using NEXUS, you explicitly assume all financial risk.
+            <strong>PLEX Automation and its operators accept no responsibility or liability for any financial losses, trading losses, or consequential damages arising from use of this Service.</strong> By using PLEX Trader, you explicitly assume all financial risk.
           </p>
         </div>
 
         <Section title="1. Acceptance of Terms">
-          <p>By accessing or using NEXUS ("Service," "Platform"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not access or use the Service. These Terms constitute a legally binding agreement between you and NEXUS.</p>
+          <p>By accessing or using PLEX Trader ("Service," "Platform"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not access or use the Service. These Terms constitute a legally binding agreement between you and PLEX Trader.</p>
           <p style={{ marginTop:12 }}>You must be at least 18 years of age and legally permitted to engage in cryptocurrency trading in your jurisdiction to use this Service.</p>
         </Section>
 
@@ -84,8 +84,8 @@ export default function Terms() {
         </Section>
 
         <Section title="6. Exchange API Keys and Fund Custody">
-          <p>When you connect exchange API keys, NEXUS executes trades on your behalf through those keys. <strong style={{ color:'#e8f4ff' }}>NEXUS never takes custody of your funds.</strong> Your cryptocurrency remains in your exchange account at all times.</p>
-          <p style={{ marginTop:12 }}>You should only grant API keys with "Trade" and "Read" permissions. Never grant withdrawal permissions to NEXUS or any third-party service. PLEX Trader is not responsible for unauthorized access to your exchange accounts or API keys.</p>
+          <p>When you connect exchange API keys, PLEX Trader executess trades on your behalf through those keys. <strong style={{ color:'#e8f4ff' }}>PLEX Trader never takes custody of your funds.</strong> Your cryptocurrency remains in your exchange account at all times.</p>
+          <p style={{ marginTop:12 }}>You should only grant API keys with "Trade" and "Read" permissions. Never grant withdrawal permissions to PLEX Trader or any third-party service. PLEX Trader is not responsible for unauthorized access to your exchange accounts or API keys.</p>
         </Section>
 
         <Section title="7. Subscription and Billing">
@@ -95,7 +95,7 @@ export default function Terms() {
         </Section>
 
         <Section title="8. Limitation of Liability">
-          <p><strong style={{ color:'#e8f4ff' }}>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NEXUS AND ITS OPERATORS, AFFILIATES, EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO:</strong></p>
+          <p><strong style={{ color:'#e8f4ff' }}>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, PLEX TRADER AND ITS OPERATORS, AFFILIATES, EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO:</strong></p>
           <ul style={{ paddingLeft:20, marginTop:8 }}>
             {[
               'Any financial losses or trading losses incurred through use of the Service',
@@ -139,14 +139,14 @@ export default function Terms() {
         </Section>
 
         <Section title="14. Entire Agreement">
-          <p>These Terms, together with our Privacy Policy, constitute the entire agreement between you and NEXUS regarding the Service and supersede all prior agreements. If any provision is found unenforceable, the remaining provisions remain in full force.</p>
+          <p>These Terms, together with our Privacy Policy, constitute the entire agreement between you and PLEX Trader regarding the Service and supersede all prior agreements. If any provision is found unenforceable, the remaining provisions remain in full force.</p>
         </Section>
       </div>
 
       <footer style={{ borderTop:`1px solid ${C.border}`, padding:'24px 5%', textAlign:'center', color:C.sub, fontSize:12 }}>
         <Link to="/" style={{ color:C.green, textDecoration:'none', marginRight:24 }}>PLEX Trader</Link>
         <Link to="/privacy" style={{ color:C.sub, textDecoration:'none', marginRight:24 }}>Privacy Policy</Link>
-        © 2026 NEXUS. All rights reserved.
+        © 2026 PLEX Automation. All rights reserved.
       </footer>
     </div>
   );

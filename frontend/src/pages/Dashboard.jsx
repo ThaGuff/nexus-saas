@@ -488,7 +488,7 @@ const SettingsModal=memo(({user,plans=[],onClose})=>{
       </div>}
 
       {tab==='privacy'&&<div style={{color:C.tx2,fontSize:13,lineHeight:1.8}}>
-        {[['Data Collection','NEXUS collects your email, trading activity, and bot configuration to provide the service. We never sell your personal information.'],['API Key Security','Exchange API keys are encrypted with AES-256-CBC and never leave our servers. They are used solely to execute trades on your behalf.'],['Trading Data','Your trading history and performance data are stored securely and used only to provide analytics within your account.'],['Your Rights','Request deletion of your account and all data at any time: privacy@plexautomation.io. Processed within 30 days.']].map(([t,d])=>(
+        {[['Data Collection','PLEX Trader collects your email, trading activity, and bot configuration to provide the service. We never sell your personal information.'],['API Key Security','Exchange API keys are encrypted with AES-256-CBC and never leave our servers. They are used solely to execute trades on your behalf.'],['Trading Data','Your trading history and performance data are stored securely and used only to provide analytics within your account.'],['Your Rights','Request deletion of your account and all data at any time: privacy@plexautomation.io. Processed within 30 days.']].map(([t,d])=>(
           <div key={t}style={{marginBottom:16,paddingBottom:16,borderBottom:`1px solid ${C.b}`}}>
             <div style={{fontWeight:700,color:C.tx,marginBottom:5,fontSize:14}}>{t}</div>
             <div>{d}</div>
@@ -1114,7 +1114,7 @@ export default function Dashboard(){
               <div style={{textAlign:'center',padding:'60px 20px'}}>
                 <div style={{fontSize:48,marginBottom:16,opacity:0.2}}>🤖</div>
                 <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,marginBottom:8}}>No Bots Yet</div>
-                <div style={{color:C.tx3,fontSize:14,lineHeight:1.7,maxWidth:360,margin:'0 auto 24px'}}>Create your first trading bot. Choose a strategy, set your risk parameters, and let NEXUS trade 24/7.</div>
+                <div style={{color:C.tx3,fontSize:14,lineHeight:1.7,maxWidth:360,margin:'0 auto 24px'}}>Create your first trading bot. Choose a strategy, set your risk parameters, and let PLEX Trader trade 24/7.</div>
                 <button onClick={()=>setShowNewBot(true)}style={{padding:'12px 28px',borderRadius:11,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,border:'none',color:'#000',fontWeight:700,fontSize:14,cursor:'pointer'}}>+ Create First Bot</button>
               </div>
             )}

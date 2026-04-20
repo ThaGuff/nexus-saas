@@ -24,7 +24,7 @@ export default function Privacy() {
         <p style={{ color:C.sub, fontSize:14, marginBottom:48 }}>Last updated: April 16, 2026</p>
 
         <Section title="1. Introduction">
-          <p>NEXUS ("we," "our," or "us") is committed to protecting your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our automated cryptocurrency trading platform and related services (the "Service").</p>
+          <p>PLEX Trader ("we," "our," or "us") is committed to protecting your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our automated cryptocurrency trading platform and related services (the "Service").</p>
           <p style={{ marginTop:12 }}>By creating an account or using the Service, you consent to the data practices described in this policy. If you do not agree with this policy, please do not use our Service.</p>
         </Section>
 
@@ -73,7 +73,7 @@ export default function Privacy() {
               'Service Providers: Stripe (payment processing), hosting providers (Railway), and analytics services, bound by confidentiality obligations',
               'Legal Requirements: When required by law, court order, or governmental authority',
               'Business Transfers: In connection with a merger, acquisition, or sale of assets, with advance notice to users',
-              'Protection of Rights: To protect the rights, property, or safety of NEXUS, our users, or others',
+              'Protection of Rights: To protect the rights, property, or safety of PLEX Trader, our users, or others',
             ].map(i => <li key={i} style={{ marginBottom:8 }}>{i}</li>)}
           </ul>
           <p style={{ marginTop:12 }}>We do not share your trading data, portfolio information, or exchange credentials with any third parties for commercial purposes.</p>
@@ -126,7 +126,7 @@ export default function Privacy() {
       <footer style={{ borderTop:`1px solid ${C.border}`, padding:'24px 5%', textAlign:'center', color:C.sub, fontSize:12 }}>
         <Link to="/" style={{ color:C.green, textDecoration:'none', marginRight:24 }}>PLEX Trader</Link>
         <Link to="/terms" style={{ color:C.sub, textDecoration:'none', marginRight:24 }}>Terms of Service</Link>
-        © 2026 NEXUS. All rights reserved.
+        © 2026 PLEX Automation. All rights reserved.
       </footer>
     </div>
   );

@@ -88,7 +88,7 @@ export default function Landing() {
           {/* Live ticker card */}
           <div style={{ background: 'linear-gradient(135deg, #0f1729 0%, #0a0f1e 100%)', border: '1px solid #ffffff10', borderRadius: 16, padding: isMobile ? 20 : 28, fontFamily: 'JetBrains Mono' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <span style={{ color: C.muted, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em' }}>NEXUS LIVE FEED</span>
+              <span style={{ color: C.muted, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em' }}>PLEX LIVE FEED</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulse 1s infinite' }} />
                 <span style={{ color: C.green, fontSize: 10 }}>ACTIVE</span>
@@ -137,7 +137,7 @@ export default function Landing() {
       {/* Features */}
       <section style={{ padding: `0 6% 80px`, maxWidth: 1100, margin: '0 auto' }}>
         <h2 style={{ textAlign: 'center', fontSize: isMobile ? 28 : 40, fontWeight: 900, letterSpacing: '-0.03em', marginBottom: 12 }}>Built Different.</h2>
-        <p style={{ textAlign: 'center', color: C.muted, fontSize: 16, marginBottom: 48 }}>Most bots trade on single signals. NEXUS requires multi-factor confirmation.</p>
+        <p style={{ textAlign: 'center', color: C.muted, fontSize: 16, marginBottom: 48 }}>Most bots trade on single signals. PLEX Trader requires multi-factor confirmation.</p>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 1 : 3}, 1fr)`, gap: 16 }}>
           {[
             { icon: '🧠', title: 'RSI + MACD Confluence', desc: 'Requires both RSI recovering AND MACD bullish before entering — the combination that achieves 73-77% accuracy in 2026 backtests.' },
@@ -177,8 +177,8 @@ export default function Landing() {
       {/* Legal */}
       <section style={{ borderTop: '1px solid #ffffff08', padding: '48px 6%', maxWidth: 800, margin: '0 auto' }}>
         <h3 style={{ color: C.red, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Risk Disclosure & Legal Notice</h3>
-        <p style={{ color: '#475569', fontSize: 12, lineHeight: 1.9, marginBottom: 12 }}>Cryptocurrency trading carries an extremely high risk of financial loss. NEXUS is automated software — <strong style={{ color: '#64748b' }}>not a licensed financial adviser, broker, or investment manager</strong>. All trades are executed by algorithms with no human oversight.</p>
-        <p style={{ color: '#475569', fontSize: 12, lineHeight: 1.9 }}>By using NEXUS you confirm you've read our <Link to="/terms" style={{ color: C.blue }}>Terms of Service</Link> and <Link to="/privacy" style={{ color: C.blue }}>Privacy Policy</Link> and accept all financial risk.</p>
+        <p style={{ color: '#475569', fontSize: 12, lineHeight: 1.9, marginBottom: 12 }}>Cryptocurrency trading carries an extremely high risk of financial loss. PLEX Trader is automated software — <strong style={{ color: '#64748b' }}>not a licensed financial adviser, broker, or investment manager</strong>. All trades are executed by algorithms with no human oversight.</p>
+        <p style={{ color: '#475569', fontSize: 12, lineHeight: 1.9 }}>By using PLEX Trader you confirm you've read our <Link to="/terms" style={{ color: C.blue }}>Terms of Service</Link> and <Link to="/privacy" style={{ color: C.blue }}>Privacy Policy</Link> and accept all financial risk.</p>
       </section>
 
       <footer style={{ borderTop: '1px solid #ffffff08', padding: '24px 6%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -188,7 +188,7 @@ export default function Landing() {
           <Link to="/terms"   style={{ color: '#475569', textDecoration: 'none', fontSize: 12 }}>Terms</Link>
           <Link to="/login"   style={{ color: '#475569', textDecoration: 'none', fontSize: 12 }}>Sign In</Link>
         </div>
-        <span style={{ color: '#334155', fontSize: 11 }}>© 2026 NEXUS · Not financial advice</span>
+        <span style={{ color: '#334155', fontSize: 11 }}>© 2026 PLEX Automation · Not financial advice</span>
       </footer>
     </div>
   );

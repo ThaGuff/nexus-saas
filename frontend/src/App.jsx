@@ -9,7 +9,7 @@ import Terms     from './pages/Terms.jsx';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div style={{ height:'100vh', background:'#04060e', display:'flex', alignItems:'center', justifyContent:'center', color:'#0ff078', fontSize:22, fontWeight:800 }}>NEXUS</div>;
+  if (loading) return <div style={{ height:'100vh', background:'#04060e', display:'flex', alignItems:'center', justifyContent:'center', color:'#0ff078', fontSize:22, fontWeight:800 }}>PLEX Trader</div>;
   return user ? children : <Navigate to="/login" replace />;
 }
 
