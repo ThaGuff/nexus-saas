@@ -200,7 +200,8 @@ async function runBotCycle(botId, userId) {
       // What comes back to balance: margin + pnl (minus fees on notional)
       const notionalSell = sellQty * px;
       const fee = notionalSell * FEE;
-      const returnedToBalance = marginForSell + pnl - fee;
+      // Balance receives back: margin committed for this sell + profit/loss - fee
+      const returnedToBalance = Math.max(0, marginForSell + pnl - fee);
       const gross = notionalSell;
       const net   = returnedToBalance;
 

@@ -753,8 +753,23 @@ export function evaluateExit(botKey,symbol,pos,prices,settings){
 }
 
 export function calcTotalValue(prices,portfolio,balance){
-  let v=balance;
-  for(const[s,{qty}]of Object.entries(portfolio)) v+=qty*(prices[s]?.price||0);
+  let v = balance;
+  for (const [sym, pos] of Object.entries(portfolio)) {
+    const px = prices[sym]?.price || 0;
+    if (!px) continue;
+    const lev = pos.leverage || 1;
+    if (lev > 1) {
+      // Leveraged position: value = margin + unrealized PnL
+      // PnL = (currentPrice - entryPrice) / entryPrice × leverage × margin
+      const margin = pos.marginSpent || (pos.qty * pos.avgCost / lev);
+      const priceChangePct = pos.avgCost > 0 ? (px - pos.avgCost) / pos.avgCost : 0;
+      const unrealizedPnl = priceChangePct * lev * margin;
+      v += Math.max(0, margin + unrealizedPnl); // can't lose more than margin
+    } else {
+      // Spot position: straightforward qty × price
+      v += pos.qty * px;
+    }
+  }
   return v;
 }
 
