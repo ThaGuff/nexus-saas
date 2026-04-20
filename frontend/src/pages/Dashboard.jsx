@@ -5,17 +5,28 @@ import{useAuth,useBotSocket}from'../lib/auth.jsx';
 import{api}from'../lib/api.js';
 
 // ─────────────────────────────────────────────
-//  PLEX TRADER · BUILD 2026-04-19
-//  DESIGN TOKENS
+//  PLEX TRADER · DESIGN TOKENS — DARK + LIGHT
 // ─────────────────────────────────────────────
-const C={
+const DARK={
   bg:'#05070f',bg2:'#080b18',bg3:'#0c1024',
   card:'rgba(255,255,255,0.035)',card2:'rgba(255,255,255,0.055)',
   b:'rgba(255,255,255,0.08)',b2:'rgba(255,255,255,0.13)',
   amber:'#ffb800',amber2:'#ff8c00',
   green:'#00e5a0',red:'#ff4757',cyan:'#00d2ff',violet:'#a855f7',
-  tx:'#e8edf5',tx2:'#94a3b8',tx3:'#475569',
+  tx:'#e8edf5',tx2:'#94a3b8',tx3:'#64748b',
+  navBg:'rgba(5,7,15,0.94)',
 };
+const LIGHT={
+  bg:'#f4f6fb',bg2:'#edf0f7',bg3:'#ffffff',
+  card:'rgba(0,0,0,0.04)',card2:'rgba(0,0,0,0.07)',
+  b:'rgba(0,0,0,0.09)',b2:'rgba(0,0,0,0.15)',
+  amber:'#d97706',amber2:'#b45309',
+  green:'#059669',red:'#dc2626',cyan:'#0284c7',violet:'#7c3aed',
+  tx:'#111827',tx2:'#374151',tx3:'#6b7280',
+  navBg:'rgba(244,246,251,0.95)',
+};
+// Mutable ref — updated at render time so all atoms get current theme
+let C=DARK;
 const SC={
   PRECISION:{c:'#00d2ff',icon:'⊕',tier:'basic'},
   DCA_PLUS: {c:'#22c55e',icon:'◎',tier:'basic'},
@@ -46,7 +57,7 @@ const fa=iso=>{if(!iso)return'—';const d=(Date.now()-new Date(iso))/1e3;if(d<6
 // ─────────────────────────────────────────────
 const css=`
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:#05070f;color:#e8edf5;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+html,body{background:var(--plex-bg,#05070f);color:var(--plex-tx,#e8edf5);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font-family:inherit}
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
@@ -503,6 +514,16 @@ export default function Dashboard(){
   const{bots,prices,strategies,connected}=useBotSocket();
   const nav=useNavigate();
   const[tab,setTab]=useState('bots');
+  // ── Theme ──────────────────────────────────────────────────────────────────
+  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem('plex_theme')!=='light');
+  // Update mutable C ref so all atoms re-render with correct palette
+  C = darkMode ? DARK : LIGHT;
+  useEffect(()=>{
+    localStorage.setItem('plex_theme', darkMode?'dark':'light');
+    document.body.style.background = darkMode?DARK.bg:LIGHT.bg;
+    document.body.style.color = darkMode?DARK.tx:LIGHT.tx;
+  },[darkMode]);
+
   const[showNewBot,setShowNewBot]=useState(false);
   const[editBot,setEditBot]=useState(null);
   const[selBotId,setSelBotId]=useState(null);
@@ -660,7 +681,7 @@ export default function Dashboard(){
   const TABS=['bots','log','market','news','exchanges','manual','strategies','analytics'];
 
   return(
-    <div style={{minHeight:'100vh',background:C.bg,color:C.tx,fontFamily:"'Inter',sans-serif"}}>
+    <div style={{minHeight:'100vh',background:C.bg,color:C.tx,fontFamily:"'Inter',sans-serif",transition:'background 0.25s,color 0.25s'}}>
       <style>{css}</style>
 
       {showNewBot&&<BotModal isNew onClose={()=>setShowNewBot(false)} onSave={async d=>{await api.createBot(d);setShowNewBot(false);}} userPlan={user?.plan} exchanges={exchanges}/>}
@@ -805,7 +826,7 @@ export default function Dashboard(){
       )}
 
       {/* ── TOP NAV ── */}
-      <nav style={{position:'sticky',top:0,zIndex:100,background:'rgba(5,7,15,0.94)',backdropFilter:'blur(20px)',borderBottom:`1px solid ${C.b}`,padding:'0 16px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+      <nav style={{position:'sticky',top:0,zIndex:100,background:C.navBg,backdropFilter:'blur(20px)',borderBottom:`1px solid ${C.b}`,padding:'0 16px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:'#000',boxShadow:`0 0 14px ${C.amber}35`}}>PX</div>
           <div>
@@ -821,6 +842,12 @@ export default function Dashboard(){
             ✦ ARIA
           </button>
           <button onClick={()=>setShowSettings(true)} style={{background:'transparent',border:`1px solid ${C.b}`,borderRadius:8,width:34,height:34,color:C.tx3,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>⚙</button>
+          {/* ── THEME TOGGLE ── */}
+          <button onClick={()=>setDarkMode(d=>!d)} title={darkMode?'Switch to Light Mode':'Switch to Dark Mode'}
+            style={{background:darkMode?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.07)',border:`1px solid ${C.b}`,borderRadius:8,width:34,height:34,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s',position:'relative',overflow:'hidden'}}>
+            <span style={{fontSize:16,lineHeight:1,transition:'transform 0.3s,opacity 0.3s',transform:darkMode?'translateY(0) scale(1)':'translateY(-20px) scale(0.5)',opacity:darkMode?1:0,position:'absolute'}}>🌙</span>
+            <span style={{fontSize:16,lineHeight:1,transition:'transform 0.3s,opacity 0.3s',transform:darkMode?'translateY(20px) scale(0.5)':'translateY(0) scale(1)',opacity:darkMode?0:1,position:'absolute'}}>☀️</span>
+          </button>
           <button onClick={()=>setShowNewBot(true)} style={{background:`linear-gradient(135deg,${C.amber},${C.amber2})`,border:'none',borderRadius:8,padding:'7px 14px',color:'#000',cursor:'pointer',fontSize:12,fontWeight:700}}>+ Bot</button>
         </div>
       </nav>
