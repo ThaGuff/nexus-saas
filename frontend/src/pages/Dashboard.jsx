@@ -1325,7 +1325,7 @@ export default function Dashboard(){
                   await api.manualTrade({botId:manualBot,type:manualType,symbol:manualSym,amountUSD:+manualAmt,notes:manualNote});
                   setManualMsg({ok:true,text:`✅ ${manualType} ${manualSym} $${manualAmt} placed successfully.`});
                   setManualNote('');
-                }catch(e){setManualMsg({ok:false,text:'❌ '+e.message);}
+                }catch(e){setManualMsg({ok:false,text:'❌ '+e.message});}
                 setManualBusy(false);
               }} style={{width:'100%',padding:'13px',borderRadius:10,background:manualBusy||!manualBot?'rgba(255,255,255,0.05)':`linear-gradient(135deg,${manualType==='BUY'?C.green:'#ff4757'},${manualType==='BUY'?'#00c87a':'#ff2040'})`,border:'none',color:manualBusy||!manualBot?C.tx3:'#000',fontWeight:700,fontSize:14,cursor:manualBusy||!manualBot?'not-allowed':'pointer',transition:'all 0.2s'}}>
                 {manualBusy?'Placing…':`Place ${manualType} Order`}
