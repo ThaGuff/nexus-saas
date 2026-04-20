@@ -517,7 +517,21 @@ export default function Dashboard(){
   const[exForm,setExForm]=useState({exchange:'coinbase',apiKey:'',apiSecret:'',apiPassphrase:'',label:'',mode:'PAPER'});
   const[exLoading,setExLoading]=useState(false);
   const[exErr,setExErr]=useState('');
-  const[drawer,setDrawer]=useState(null); // 'winrate' | 'trades' | 'fees'
+  const[drawer,setDrawer]=useState(null);
+
+  // Manual trading state
+  const[manualSym,setManualSym]=useState('BTC');
+  const[manualType,setManualType]=useState('BUY');
+  const[manualAmt,setManualAmt]=useState('100');
+  const[manualBot,setManualBot]=useState('');
+  const[manualNote,setManualNote]=useState('');
+  const[manualBusy,setManualBusy]=useState(false);
+  const[manualMsg,setManualMsg]=useState(null);
+
+  // Custom strategy state
+  const[customStrategies,setCustomStrategies]=useState([]);
+  const[newStrat,setNewStrat]=useState({name:'',description:'',minRsi:'',maxRsi:'',requireMacdBull:false,requireBbLower:false,minVolRatio:'1.2',minScore:'8'});
+  const[stratMsg,setStratMsg]=useState(null); // 'winrate' | 'trades' | 'fees'
   const logRef=useRef(null);
 
   // ── Data fetching + auto-refresh ──────────────────────────────────────────
@@ -643,7 +657,7 @@ export default function Dashboard(){
     </div>
   );
 
-  const TABS=['bots','log','market','news','exchanges','analytics'];
+  const TABS=['bots','log','market','news','exchanges','manual','strategies','analytics'];
 
   return(
     <div style={{minHeight:'100vh',background:C.bg,color:C.tx,fontFamily:"'Inter',sans-serif"}}>
@@ -1236,6 +1250,236 @@ export default function Dashboard(){
                 </div>
               ))}
             </div>}
+          </div>
+        )}
+
+        {/* ━━━ MANUAL TRADING ━━━ */}
+        {tab==='manual'&&(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:20}}>
+
+            {/* Place Manual Trade */}
+            <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,padding:20}}>
+              <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>Manual Trade</div>
+              <div style={{color:C.tx3,fontSize:12,marginBottom:18,lineHeight:1.5}}>Place a buy or sell order manually on any of your bots, bypassing the bot strategy. Useful for managing positions yourself.</div>
+
+              {manualMsg&&<div style={{marginBottom:14,padding:'10px 13px',borderRadius:9,background:manualMsg.ok?`${C.green}15`:`${C.red}15`,border:`1px solid ${manualMsg.ok?C.green:C.red}40`,color:manualMsg.ok?C.green:C.red,fontSize:12}}>{manualMsg.text}</div>}
+
+              {/* BUY / SELL toggle */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
+                {['BUY','SELL'].map(t=><button key={t}onClick={()=>setManualType(t)}style={{padding:'11px',borderRadius:9,border:`1.5px solid ${manualType===t?(t==='BUY'?C.green:C.red)+'66':C.b}`,background:manualType===t?(t==='BUY'?C.green:C.red)+'14':'transparent',color:manualType===t?(t==='BUY'?C.green:C.red):C.tx3,fontWeight:700,fontSize:14,cursor:'pointer',transition:'all 0.15s'}}>{t}</button>)}
+              </div>
+
+              {/* Bot selector */}
+              <div style={{marginBottom:12}}>
+                <div style={{color:C.tx3,fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>Select Bot</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {bots.map(b=>{const sc=SC[b.strategy]||SC.PRECISION;return<button key={b.id}onClick={()=>setManualBot(b.id)}style={{padding:'7px 13px',borderRadius:8,border:`1.5px solid ${manualBot===b.id?sc.c:C.b}`,background:manualBot===b.id?`${sc.c}14`:'transparent',color:manualBot===b.id?sc.c:C.tx3,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all 0.15s'}}>{b.name}</button>;})}
+                </div>
+                {manualBot&&(()=>{const b=bots.find(x=>x.id===manualBot);return b?<div style={{marginTop:6,fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>Cash available: <span style={{color:C.tx}}>{fu(b.balance)}</span></div>:null;})()}
+              </div>
+
+              {/* Coin selector */}
+              <div style={{marginBottom:12}}>
+                <div style={{color:C.tx3,fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>Coin</div>
+                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {['BTC','ETH','SOL','BNB','XRP','AVAX','LINK','DOGE','NEAR','ARB'].map(s=>{
+                    const px=prices[s]?.price;
+                    const held=manualBot&&bots.find(b=>b.id===manualBot)?.portfolio?.[s];
+                    return<button key={s}onClick={()=>setManualSym(s)}style={{padding:'6px 10px',borderRadius:7,border:`1.5px solid ${manualSym===s?(CC[s]||C.amber):held?`${CC[s]||C.amber}44`:C.b}`,background:manualSym===s?`${CC[s]||C.amber}14`:held?`${CC[s]||C.amber}08`:'transparent',color:manualSym===s?CC[s]||C.amber:C.tx3,fontSize:10,fontWeight:600,cursor:'pointer',position:'relative'}}>
+                      {s}{held?<span style={{position:'absolute',top:-4,right:-4,width:6,height:6,borderRadius:'50%',background:CC[s]||C.amber,border:`1.5px solid ${C.bg3}`}}/>:null}
+                    </button>;
+                  })}
+                </div>
+                {prices[manualSym]&&<div style={{marginTop:6,fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>
+                  Current: <span style={{color:C.tx,fontWeight:600}}>{fu(prices[manualSym].price)}</span>
+                  <span style={{color:prices[manualSym].change24h>=0?C.green:C.red,marginLeft:8}}>{fp(prices[manualSym].change24h)}</span>
+                  {manualType==='SELL'&&manualBot&&(()=>{const pos=bots.find(b=>b.id===manualBot)?.portfolio?.[manualSym];return pos?<span style={{color:C.tx3,marginLeft:8}}>Held: {pos.qty.toFixed(4)}</span>:null;})()}
+                </div>}
+              </div>
+
+              {/* Amount */}
+              <div style={{marginBottom:12}}>
+                <div style={{color:C.tx3,fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>
+                  {manualType==='BUY'?'Amount (USD)':'Amount (USD value to sell)'}
+                </div>
+                <div style={{position:'relative'}}>
+                  <span style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:C.tx3,fontSize:13,fontFamily:"'DM Mono',monospace",pointerEvents:'none'}}>$</span>
+                  <input type="number" value={manualAmt} onChange={e=>setManualAmt(e.target.value)} placeholder="100"
+                    style={{width:'100%',background:'rgba(0,0,0,0.3)',border:`1px solid ${C.b2}`,borderRadius:9,padding:'10px 13px 10px 26px',color:C.tx,fontSize:13,outline:'none',boxSizing:'border-box'}}
+                    onFocus={e=>e.target.style.borderColor=C.amber} onBlur={e=>e.target.style.borderColor=C.b2}/>
+                </div>
+                {prices[manualSym]&&+manualAmt>0&&<div style={{marginTop:5,fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>≈ {(+manualAmt/prices[manualSym].price).toFixed(5)} {manualSym}</div>}
+              </div>
+
+              {/* Note */}
+              <div style={{marginBottom:16}}>
+                <div style={{color:C.tx3,fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>Note (optional)</div>
+                <input value={manualNote} onChange={e=>setManualNote(e.target.value)} placeholder="My reason for this trade…"
+                  style={{width:'100%',background:'rgba(0,0,0,0.3)',border:`1px solid ${C.b2}`,borderRadius:9,padding:'10px 13px',color:C.tx,fontSize:12,outline:'none',boxSizing:'border-box'}}
+                  onFocus={e=>e.target.style.borderColor=C.amber} onBlur={e=>e.target.style.borderColor=C.b2}/>
+              </div>
+
+              <button disabled={manualBusy||!manualBot||!manualSym||!manualAmt} onClick={async()=>{
+                setManualBusy(true);setManualMsg(null);
+                try{
+                  await api.manualTrade({botId:manualBot,type:manualType,symbol:manualSym,amountUSD:+manualAmt,notes:manualNote});
+                  setManualMsg({ok:true,text:`✅ ${manualType} ${manualSym} $${manualAmt} placed successfully.`});
+                  setManualNote('');
+                }catch(e){setManualMsg({ok:false,text:`❌ ${e.message}`);}
+                setManualBusy(false);
+              }} style={{width:'100%',padding:'13px',borderRadius:10,background:manualBusy||!manualBot?'rgba(255,255,255,0.05)':`linear-gradient(135deg,${manualType==='BUY'?C.green:'#ff4757'},${manualType==='BUY'?'#00c87a':'#ff2040'})`,border:'none',color:manualBusy||!manualBot?C.tx3:'#000',fontWeight:700,fontSize:14,cursor:manualBusy||!manualBot?'not-allowed':'pointer',transition:'all 0.2s'}}>
+                {manualBusy?'Placing…':`Place ${manualType} Order`}
+              </button>
+            </div>
+
+            {/* Open positions — manual sell shortcuts */}
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,background:'rgba(0,0,0,0.2)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:4,height:4,borderRadius:'50%',background:C.green,display:'inline-block'}}/>All Open Positions
+                  </span>
+                  <span style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>{bots.reduce((s,b)=>s+Object.keys(b.portfolio||{}).length,0)} positions</span>
+                </div>
+                {bots.every(b=>!Object.keys(b.portfolio||{}).length)
+                  ?<div style={{padding:'28px',textAlign:'center',color:C.tx3,fontSize:12}}>No open positions across all bots.</div>
+                  :bots.map(bot=>Object.entries(bot.portfolio||{}).map(([sym,pos])=>{
+                      const px=prices[sym]?.price||0;
+                      const lev=pos.leverage||1;
+                      const priceChg=pos.avgCost?(px-pos.avgCost)/pos.avgCost:0;
+                      const effPnl=lev>1?priceChg*lev*(pos.marginSpent||pos.qty*pos.avgCost/lev):priceChg*(pos.qty*pos.avgCost);
+                      const sc=SC[bot.strategy]||SC.PRECISION;
+                      return<div key={`${bot.id}-${sym}`}style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                            <span style={{fontWeight:800,fontSize:13,color:CC[sym]||C.tx}}>{sym}</span>
+                            {lev>1&&<Pill c={C.violet}>⚡{lev}x</Pill>}
+                            <span style={{fontSize:10,color:sc.c,opacity:0.7}}>{bot.name}</span>
+                          </div>
+                          <div style={{fontSize:10,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>{pos.qty.toFixed(4)} @ {fu(pos.avgCost)}</div>
+                          <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:effPnl>=0?C.green:C.red,marginTop:2}}>{effPnl>=0?'+':''}{fu(effPnl)} ({fp(priceChg*lev*100)})</div>
+                        </div>
+                        <button onClick={()=>{setManualBot(bot.id);setManualSym(sym);setManualType('SELL');setManualAmt((pos.qty*px).toFixed(2));setTab('manual');}}
+                          style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.red}44`,background:`${C.red}10`,color:C.red,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                          Sell
+                        </button>
+                      </div>;
+                    }))
+                }
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ━━━ CUSTOM STRATEGIES ━━━ */}
+        {tab==='strategies'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:20}}>
+
+            <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,padding:20}}>
+              <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>Custom Strategy Builder</div>
+              <div style={{color:C.tx3,fontSize:12,marginBottom:18,lineHeight:1.6}}>
+                Define your own entry conditions. The bot scores each coin against your rules and buys when enough conditions are met. Your custom strategy will appear as an option when creating or configuring a bot.
+              </div>
+
+              {stratMsg&&<div style={{marginBottom:14,padding:'10px 13px',borderRadius:9,background:stratMsg.ok?`${C.green}15`:`${C.red}15`,border:`1px solid ${stratMsg.ok?C.green:C.red}40`,color:stratMsg.ok?C.green:C.red,fontSize:12}}>{stratMsg.text}</div>}
+
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+                <div style={{gridColumn:'1/-1'}}>
+                  <Inp label="Strategy Name" value={newStrat.name} onChange={v=>setNewStrat(p=>({...p,name:v}))} placeholder="My RSI Bounce Strategy"/>
+                </div>
+                <div style={{gridColumn:'1/-1'}}>
+                  <Inp label="Description" value={newStrat.description} onChange={v=>setNewStrat(p=>({...p,description:v}))} placeholder="Brief description of when this fires"/>
+                </div>
+                <div>
+                  <Inp label="Min RSI" value={newStrat.minRsi} onChange={v=>setNewStrat(p=>({...p,minRsi:v}))} type="number" min={0} max={100} placeholder="e.g. 20" note="RSI must be above this"/>
+                </div>
+                <div>
+                  <Inp label="Max RSI" value={newStrat.maxRsi} onChange={v=>setNewStrat(p=>({...p,maxRsi:v}))} type="number" min={0} max={100} placeholder="e.g. 50" note="RSI must be below this"/>
+                </div>
+                <div>
+                  <Inp label="Min Volume Ratio" value={newStrat.minVolRatio} onChange={v=>setNewStrat(p=>({...p,minVolRatio:v}))} type="number" min={0.5} step={0.1} placeholder="1.2" note="Volume vs 14-period avg"/>
+                </div>
+                <div>
+                  <Inp label="Min Score to Buy" value={newStrat.minScore} onChange={v=>setNewStrat(p=>({...p,minScore:v}))} type="number" min={1} max={20} placeholder="8" note="Higher = fewer but better trades"/>
+                </div>
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <div style={{color:C.tx3,fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>Required Conditions</div>
+                <div style={{display:'flex',flexDirection:'column',gap:1}}>
+                  {[
+                    ['requireMacdBull','MACD must be bullish (line above signal, positive histogram)'],
+                    ['requireBbLower', 'Price must be below BB midband (not overbought)'],
+                    ['requireRsiUp',   'RSI must be rising (not still falling)'],
+                    ['requireVolUp',   'Volume must be above average'],
+                  ].map(([key,label])=>(
+                    <Toggle key={key} label={label} checked={!!newStrat[key]} onChange={v=>setNewStrat(p=>({...p,[key]:v}))} color={C.amber}/>
+                  ))}
+                </div>
+              </div>
+
+              <button disabled={!newStrat.name} onClick={async()=>{
+                try{
+                  await api.createCustom(newStrat);
+                  setStratMsg({ok:true,text:`✅ Strategy "${newStrat.name}" created. Assign it to a bot in bot configuration.`});
+                  setCustomStrategies(p=>[...p,{...newStrat,id:Date.now()}]);
+                  setNewStrat({name:'',description:'',minRsi:'',maxRsi:'',requireMacdBull:false,requireBbLower:false,requireRsiUp:false,requireVolUp:false,minVolRatio:'1.2',minScore:'8'});
+                }catch(e){setStratMsg({ok:false,text:`❌ ${e.message}`});}
+              }} style={{width:'100%',padding:'12px',borderRadius:10,background:newStrat.name?`linear-gradient(135deg,${C.amber},${C.amber2})`:'rgba(255,255,255,0.05)',border:'none',color:newStrat.name?'#000':C.tx3,fontWeight:700,fontSize:13,cursor:newStrat.name?'pointer':'not-allowed'}}>
+                Create Strategy
+              </button>
+            </div>
+
+            {/* Saved custom strategies */}
+            {customStrategies.length>0&&(
+              <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,background:'rgba(0,0,0,0.2)'}}>
+                  <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:4,height:4,borderRadius:'50%',background:C.amber,display:'inline-block'}}/>Your Custom Strategies ({customStrategies.length})
+                  </span>
+                </div>
+                {customStrategies.map(s=>(
+                  <div key={s.id}style={{padding:'14px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:13,color:C.amber,marginBottom:4}}>{s.name}</div>
+                      <div style={{fontSize:11,color:C.tx3,marginBottom:6}}>{s.description||'No description'}</div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {s.minRsi&&<Pill c={C.cyan}>RSI >{s.minRsi}</Pill>}
+                        {s.maxRsi&&<Pill c={C.cyan}>RSI <{s.maxRsi}</Pill>}
+                        {s.requireMacdBull&&<Pill c={C.green}>MACD Bull</Pill>}
+                        {s.requireBbLower&&<Pill c={C.violet}>BB Lower</Pill>}
+                        {s.requireRsiUp&&<Pill c={C.amber}>RSI Rising</Pill>}
+                        <Pill c={C.tx3}>Vol >{s.minVolRatio}x</Pill>
+                        <Pill c={C.amber}>Min Score {s.minScore}</Pill>
+                      </div>
+                    </div>
+                    <button onClick={()=>setCustomStrategies(p=>p.filter(x=>x.id!==s.id))}
+                      style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.red}30`,background:'transparent',color:C.red,fontSize:10,cursor:'pointer',flexShrink:0,marginLeft:12}}>Delete</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Built-in strategies reference */}
+            <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:14,overflow:'hidden'}}>
+              <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,background:'rgba(0,0,0,0.2)'}}>
+                <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:C.tx3,fontFamily:"'DM Mono',monospace",display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:4,height:4,borderRadius:'50%',background:C.cyan,display:'inline-block'}}/>Built-in Strategies Reference
+                </span>
+              </div>
+              {Object.entries(SC).map(([key,s])=>(
+                <div key={key}style={{padding:'12px 16px',borderBottom:`1px solid ${C.b}`,display:'flex',gap:12,alignItems:'flex-start'}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:`${s.c}15`,border:`1px solid ${s.c}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{s.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                      <span style={{fontWeight:700,fontSize:13,color:s.c}}>{key.replace('_',' ')}</span>
+                      <Pill c={s.tier==='basic'?C.green:C.amber}>{s.tier==='basic'?'BASIC':'PREMIUM'}</Pill>
+                    </div>
+                    <div style={{fontSize:11,color:C.tx3,lineHeight:1.5}}>{STRAT_DESC[key]}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

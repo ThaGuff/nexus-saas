@@ -11,9 +11,39 @@ const router = express.Router();
 const convHistory = new Map();
 
 // Build URL per-request — never stale even if env var set after boot
-function geminiUrl() {
+// Try models in order of preference — falls back if one fails
+const GEMINI_MODELS = [
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent',
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+];
+
+function geminiUrl(modelIndex = 0) {
   const key = process.env.GEMINI_API_KEY || '';
-  return `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${key}`;
+  const base = GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0];
+  return `${base}?key=${key}`;
+}
+
+async function callGeminiWithFallback(payload, timeout = 25000) {
+  let lastError = null;
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    try {
+      const url = geminiUrl(i);
+      const res = await axios.post(url, payload, { timeout });
+      return res;
+    } catch (e) {
+      lastError = e;
+      const msg = e.response?.data?.error?.message || e.message || '';
+      // Only try next model if it's a model-not-found error
+      if (msg.includes('not found') || msg.includes('not supported') || msg.includes('INVALID_ARGUMENT')) {
+        console.log(`[AI] Model ${i} failed (${msg.slice(0,60)}), trying next...`);
+        continue;
+      }
+      // For auth, rate limit, etc — don't retry
+      throw e;
+    }
+  }
+  throw lastError;
 }
 
 router.post('/chat', requireAuth, async (req, res) => {
@@ -89,14 +119,14 @@ ${historyText ? `CONVERSATION HISTORY:\n${historyText}\n` : ''}
 User: ${message}
 ARIA:`;
 
-    const response = await axios.post(geminiUrl(), {
+    const response = await callGeminiWithFallback({
       contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
       generationConfig: { temperature: 0.25, maxOutputTokens: 700, topP: 0.85 },
       safetySettings: [
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
         { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
       ],
-    }, { timeout: 25000 });
+    });
 
     const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text
       || 'No response generated. Please try again.';

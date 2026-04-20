@@ -23,7 +23,11 @@ import { broadcastToUser } from '../routes/ws.js';
 const MAX_BOTS = 3;
 const FEE      = 0.006;
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_MODELS = [
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent',
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+];
 
 // In-memory state
 const botTimers    = new Map(); // botId → IntervalId
@@ -75,18 +79,26 @@ function ulog(botId, userId, msg, level='INFO') {
 // ── Gemini AI confirmation (free API) ─────────────────────────────────────────
 async function callGemini(prompt) {
   if (!GEMINI_KEY) return null;
-  try {
-    const res = await axios.post(GEMINI_URL, {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.05, maxOutputTokens: 150 },
-    }, { timeout: 10000 });
-    const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const clean = text.replace(/```json|```/g,'').trim();
-    return JSON.parse(clean);
-  } catch(e) {
-    console.log('[Gemini] error:', e.message);
-    return null;
+  for (const modelUrl of GEMINI_MODELS) {
+    try {
+      const url = `${modelUrl}?key=${GEMINI_KEY}`;
+      const res = await axios.post(url, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.05, maxOutputTokens: 150 },
+      }, { timeout: 10000 });
+      const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const clean = text.replace(/```json|```/g,'').trim();
+      return JSON.parse(clean);
+    } catch(e) {
+      const msg = e.response?.data?.error?.message || e.message || '';
+      if (msg.includes('not found') || msg.includes('not supported') || msg.includes('INVALID_ARGUMENT')) {
+        continue; // try next model
+      }
+      console.log('[Gemini] error:', msg);
+      return null;
+    }
   }
+  return null;
 }
 
 // ── Core trading cycle ────────────────────────────────────────────────────────
