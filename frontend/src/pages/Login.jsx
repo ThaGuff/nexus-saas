@@ -29,7 +29,7 @@ export default function Login() {
 
   return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <Link to="/" style={{ color:C.green, fontWeight:800, fontSize:22, textDecoration:'none', marginBottom:32 }}>NEXUS</Link>
+      <Link to="/" style={{ color:C.green, fontWeight:800, fontSize:22, textDecoration:'none', marginBottom:32 }}>PLEX Trader</Link>
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'40px', width:'100%', maxWidth:400 }}>
         <h1 style={{ color:'#e8f4ff', fontSize:24, fontWeight:800, marginBottom:8 }}>Welcome back</h1>
         <p style={{ color:C.sub, fontSize:14, marginBottom:32 }}>Sign in to your NEXUS account</p>

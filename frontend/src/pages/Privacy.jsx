@@ -15,7 +15,7 @@ export default function Privacy() {
   return (
     <div style={{ minHeight:'100vh', background:C.bg }}>
       <nav style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'20px 5%', borderBottom:`1px solid ${C.border}` }}>
-        <Link to="/" style={{ color:C.green, fontWeight:800, fontSize:20, textDecoration:'none' }}>NEXUS</Link>
+        <Link to="/" style={{ color:C.green, fontWeight:800, fontSize:20, textDecoration:'none' }}>PLEX Trader</Link>
         <Link to="/login" style={{ color:C.text, textDecoration:'none', fontSize:14 }}>Sign In</Link>
       </nav>
 
@@ -124,7 +124,7 @@ export default function Privacy() {
       </div>
 
       <footer style={{ borderTop:`1px solid ${C.border}`, padding:'24px 5%', textAlign:'center', color:C.sub, fontSize:12 }}>
-        <Link to="/" style={{ color:C.green, textDecoration:'none', marginRight:24 }}>NEXUS</Link>
+        <Link to="/" style={{ color:C.green, textDecoration:'none', marginRight:24 }}>PLEX Trader</Link>
         <Link to="/terms" style={{ color:C.sub, textDecoration:'none', marginRight:24 }}>Terms of Service</Link>
         © 2026 NEXUS. All rights reserved.
       </footer>

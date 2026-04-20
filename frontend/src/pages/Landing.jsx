@@ -14,7 +14,7 @@ function useIsMobile() {
   return m;
 }
 
-const RISK = 'RISK DISCLOSURE: Cryptocurrency trading involves substantial risk of financial loss. Past performance does not guarantee future results. NEXUS is an automated tool, not a licensed financial adviser. You may lose some or all of your invested capital. Never invest money you cannot afford to lose. NEXUS and its operators are not responsible for any trading losses.';
+const RISK = 'RISK DISCLOSURE: Cryptocurrency trading involves substantial risk of financial loss. Past performance does not guarantee future results. PLEX Trader is an automated tool, not a licensed financial adviser. You may lose some or all of your invested capital. Never invest money you cannot afford to lose. PLEX Automation and its operators are not responsible for any trading losses.';
 
 export default function Landing() {
   const isMobile = useIsMobile();
@@ -49,7 +49,7 @@ export default function Landing() {
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '16px 20px' : '20px 6%', borderBottom: '1px solid #ffffff08', position: 'sticky', top: 0, background: '#030508ee', backdropFilter: 'blur(20px)', zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.green, boxShadow: `0 0 8px ${C.green}`, animation: 'pulse 2s infinite' }} />
-          <span style={{ color: C.green, fontWeight: 800, fontSize: 18, letterSpacing: '-0.02em', fontFamily: 'JetBrains Mono' }}>NEXUS</span>
+          <span style={{ color: C.green, fontWeight: 800, fontSize: 18, letterSpacing: '-0.02em', fontFamily: 'JetBrains Mono' }}>PLEX Trader</span>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <Link to="/login" className="btn-secondary" style={{ color: C.muted, textDecoration: 'none', padding: isMobile ? '8px 14px' : '9px 20px', borderRadius: 8, border: '1px solid #ffffff14', fontSize: 13, fontWeight: 500 }}>Log In</Link>
@@ -72,7 +72,7 @@ export default function Landing() {
               Your Life.
             </h1>
             <p style={{ fontSize: isMobile ? 15 : 17, color: C.muted, lineHeight: 1.7, marginBottom: 32, maxWidth: 480 }}>
-              NEXUS is an autonomous trading bot that combines RSI, MACD, Bollinger Bands, and volume analysis to identify high-probability trades — completely hands-free.
+              PLEX Trader is an autonomous trading bot that combines RSI, MACD, Bollinger Bands, and volume analysis to identify high-probability trades — completely hands-free.
             </p>
             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, marginBottom: 20 }}>
               <Link to="/register" className="btn-primary" style={{ color: '#000', background: C.green, textDecoration: 'none', padding: '14px 28px', borderRadius: 10, fontSize: 15, fontWeight: 800, textAlign: 'center', display: 'block' }}>
@@ -182,7 +182,7 @@ export default function Landing() {
       </section>
 
       <footer style={{ borderTop: '1px solid #ffffff08', padding: '24px 6%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <span style={{ color: C.green, fontWeight: 800, fontFamily: 'JetBrains Mono', fontSize: 14 }}>NEXUS</span>
+        <span style={{ color: C.green, fontWeight: 800, fontFamily: 'JetBrains Mono', fontSize: 14 }}>PLEX Trader</span>
         <div style={{ display: 'flex', gap: 20 }}>
           <Link to="/privacy" style={{ color: '#475569', textDecoration: 'none', fontSize: 12 }}>Privacy</Link>
           <Link to="/terms"   style={{ color: '#475569', textDecoration: 'none', fontSize: 12 }}>Terms</Link>

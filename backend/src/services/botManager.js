@@ -1,56 +1,58 @@
 /**
- * NEXUS SAAS · Bot Manager v6 — FIXED
- * 
- * KEY FIX: Single consistent botKey used everywhere.
- * fetchPrices, seedPriceHistory, scoreForBuy, evaluateExit all use botId.
- * userPrices stores the DISPLAY prices (from userId key for sharing UI).
- * Algorithm history uses botId for isolation between bots.
+ * PLEX TRADER · Bot Manager v7
+ *
+ * FIXES:
+ * 1. Stuck bot fix — cycle lock with timeout (was deadlocking)
+ * 2. Learning engine wired correctly — recordTrade on every SELL
+ * 3. Gemini API for AI confirmation — free tier, no Anthropic charges
+ * 4. Score scaled to 0-10 confidence, requires 8+ to execute buy
+ * 5. Display price refresh decoupled from cycle — updates every 15s
+ * 6. Cycle interval from env var (default 90s — calmer, higher quality)
  */
 
 import axios from 'axios';
 import {
   fetchPrices, seedPriceHistory, scoreForBuy, evaluateExit,
-  calcTotalValue, buildMarketSummary, COINS, STRATEGY_LIST,
+  calcTotalValue, buildMarketSummary, COINS, STRATEGY_LIST, STRATEGIES,
   setCooldown, isOnCooldown
 } from './algorithm.js';
+import { recordTrade, getLearningStats } from './learningEngine.js';
 import { Users, Bots, Trades, BotLogs, Exchanges } from '../models/db.js';
 import { broadcastToUser } from '../routes/ws.js';
 
-const MAX_BOTS_PER_USER = 3;
+const MAX_BOTS = 3;
+const FEE      = 0.006;
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
-const FEE = 0.006;
 
 // In-memory state
-const botTimers  = new Map(); // botId -> cycleTimer
-const botMem     = new Map(); // botId -> { balance, portfolio, ... }
-const botPrices  = new Map(); // botId -> prices (each bot has its own price cache)
-const priceTimers= new Map(); // userId -> priceTimer (shared display refresh)
-const displayPrices = new Map(); // userId -> prices (for dashboard display)
+const botTimers    = new Map(); // botId → IntervalId
+const botMem       = new Map(); // botId → state
+const botPrices    = new Map(); // botId → prices
+const displayPrices= new Map(); // userId → prices
+const priceTimers  = new Map(); // userId → IntervalId
+const cyclingBots  = new Set(); // botIds currently in a cycle (deadlock prevention)
+const cycleTimeouts= new Map(); // botId → timeout (stuck detection)
 
-// ── Memory helpers ────────────────────────────────────────────────────────────
 function getMem(botId, bot) {
   if (!botMem.has(botId)) {
     botMem.set(botId, {
-      balance:      bot.balance        ?? bot.startingBalance ?? 100,
-      startingBalance: bot.startingBalance ?? 100,
-      portfolio:    bot.portfolio      || {},
-      peakValue:    bot.peakValue      ?? bot.startingBalance ?? 100,
-      cycleCount:   bot.cycleCount     || 0,
-      totalFees:    bot.totalFees      || 0,
-      status:       'running',
-      startedAt:    new Date().toISOString(),
-      lastCycleAt:  null,
+      balance:        bot.balance        ?? bot.startingBalance ?? 100,
+      startingBalance:bot.startingBalance ?? 100,
+      portfolio:      bot.portfolio      || {},
+      peakValue:      bot.peakValue      ?? bot.startingBalance ?? 100,
+      cycleCount:     bot.cycleCount     || 0,
+      totalFees:      bot.totalFees      || 0,
+      status:         'running',
+      startedAt:      new Date().toISOString(),
+      lastCycleAt:    null,
     });
   }
   return botMem.get(botId);
 }
-
 function setMem(botId, updates) {
-  const s = botMem.get(botId) || {};
-  botMem.set(botId, { ...s, ...updates });
+  botMem.set(botId, { ...(botMem.get(botId)||{}), ...updates });
 }
-
 async function syncBot(botId) {
   const s = botMem.get(botId);
   if (!s) return;
@@ -61,431 +63,406 @@ async function syncBot(botId) {
   }).catch(e => console.error('[BotMgr] syncBot error:', e.message));
 }
 
-// ── Logging ───────────────────────────────────────────────────────────────────
-function ulog(botId, userId, msg, level = 'INFO') {
+function ulog(botId, userId, msg, level='INFO') {
   const entry = { ts: new Date().toISOString(), level, msg };
-  BotLogs.append(botId, entry).catch(() => {});
-  broadcastToUser(userId, { type: 'BOT_LOG', botId, entry });
-  if (['TRADE','ERROR','CYCLE','PROFIT','LOSS','SYSTEM','SIGNAL'].includes(level)) {
+  BotLogs.append(botId, entry).catch(()=>{});
+  broadcastToUser(userId, { type:'BOT_LOG', botId, entry });
+  if (['TRADE','ERROR','CYCLE','PROFIT','LOSS','SYSTEM','SIGNAL','AI'].includes(level)) {
     console.log(`[${level}][${botId.slice(0,6)}] ${msg}`);
   }
 }
 
-// ── Gemini ────────────────────────────────────────────────────────────────────
+// ── Gemini AI confirmation (free API) ─────────────────────────────────────────
 async function callGemini(prompt) {
   if (!GEMINI_KEY) return null;
   try {
     const res = await axios.post(GEMINI_URL, {
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 200 },
-    }, { timeout: 8000 });
+      generationConfig: { temperature: 0.05, maxOutputTokens: 150 },
+    }, { timeout: 10000 });
     const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch { return null; }
+    const clean = text.replace(/```json|```/g,'').trim();
+    return JSON.parse(clean);
+  } catch(e) {
+    console.log('[Gemini] error:', e.message);
+    return null;
+  }
 }
 
-// ── Core cycle ────────────────────────────────────────────────────────────────
+// ── Core trading cycle ────────────────────────────────────────────────────────
 async function runBotCycle(botId, userId) {
-  // Get bot config — handle missing bots table gracefully
+  // STUCK BOT PREVENTION: if already cycling, skip this cycle
+  if (cyclingBots.has(botId)) {
+    console.log(`[BotMgr][${botId.slice(0,6)}] Skipping cycle — previous cycle still running`);
+    return;
+  }
+
   let bot = null;
   try { bot = await Bots.findById(botId); } catch {}
-
-  if (bot && !bot.enabled) return; // explicitly stopped
-
-  // Fallback if table missing or bot not found
+  if (bot && !bot.enabled) return;
   if (!bot) {
     const ms = botMem.get(botId);
     if (!ms) return;
-    bot = {
-      id: botId, userId,
-      name: 'Bot', strategy: 'AGGRESSIVE', botMode: 'PAPER',
-      maxTradeUSD: ms.startingBalance * 0.2,
-      stopLossPct: 0.05, takeProfitPct: 0.08,
-      maxDrawdownPct: 0.20, maxPositionPct: 0.35,
-      leverageEnabled: false, maxLeverage: 3,
-      enabled: true,
-    };
+    bot = { id:botId, userId, name:'Bot', strategy:'PRECISION', botMode:'PAPER',
+      maxTradeUSD:ms.startingBalance*0.2, stopLossPct:0.05, takeProfitPct:0.08,
+      maxDrawdownPct:0.20, maxPositionPct:0.35, leverageEnabled:false, maxLeverage:3, enabled:true };
   }
 
   const ms = getMem(botId, bot);
-  if (ms.status === 'cycling') return;
+  const cycleNum = (ms.cycleCount||0)+1;
 
-  const cycleNum = (ms.cycleCount || 0) + 1;
-  setMem(botId, { status: 'cycling', cycleCount: cycleNum, lastCycleAt: new Date().toISOString() });
+  // Mark as cycling — with 3-minute timeout watchdog
+  cyclingBots.add(botId);
+  const watchdog = setTimeout(()=>{
+    console.error(`[BotMgr][${botId.slice(0,6)}] WATCHDOG: cycle took >3min — force releasing lock`);
+    cyclingBots.delete(botId);
+    setMem(botId, { status:'running' });
+  }, 180000);
+  cycleTimeouts.set(botId, watchdog);
 
-  const logPrefix = `[${bot.name}] Cycle #${cycleNum}`;
-  ulog(botId, userId, `━━━ ${logPrefix} | ${bot.strategy} | Cash: $${ms.balance.toFixed(2)} ━━━`, 'CYCLE');
-
-  // ── Fetch prices using botId as key (matches algorithm history key) ──────────
-  let prices = {};
   try {
-    prices = await fetchPrices(botId); // botId = key for price history
-    botPrices.set(botId, prices);
-    // Also update display prices for this user
-    displayPrices.set(userId, prices);
-    broadcastToUser(userId, { type: 'PRICES', prices });
-  } catch (e) {
-    ulog(botId, userId, `Price fetch failed: ${e.message}`, 'ERROR');
-    setMem(botId, { status: 'running' });
-    return;
-  }
+    setMem(botId, { status:'cycling', cycleCount:cycleNum, lastCycleAt:new Date().toISOString() });
+    ulog(botId, userId, `━━━ [${bot.name}] Cycle #${cycleNum} | ${bot.strategy} | Cash: $${ms.balance.toFixed(2)} ━━━`, 'CYCLE');
 
-  const priceCount = Object.keys(prices).length;
-  ulog(botId, userId, `Prices loaded: ${priceCount} coins`, 'INFO');
-
-  const settings = {
-    tradingStrategy: bot.strategy,
-    botMode:         bot.botMode,
-    maxTradeUSD:     bot.maxTradeUSD,
-    stopLossPct:     bot.stopLossPct,
-    takeProfitPct:   bot.takeProfitPct,
-    maxDrawdownPct:  bot.maxDrawdownPct,
-    maxPositionPct:  bot.maxPositionPct,
-    leverageEnabled: bot.leverageEnabled,
-    maxLeverage:     bot.maxLeverage,
-  };
-
-  const portfolio = ms.portfolio || {};
-  const balance   = ms.balance;
-  const tv        = calcTotalValue(prices, portfolio, balance);
-  const peakValue = Math.max(ms.peakValue || tv, tv);
-  const drawdown  = peakValue > 0 ? (peakValue - tv) / peakValue : 0;
-
-  ulog(botId, userId, `Portfolio: $${tv.toFixed(2)} | Cash: $${balance.toFixed(2)} | Drawdown: ${(drawdown*100).toFixed(1)}%`, 'INFO');
-
-  // Emergency exit
-  if (drawdown >= bot.maxDrawdownPct && Object.keys(portfolio).length > 0) {
-    ulog(botId, userId, `⚠️ MAX DRAWDOWN ${(drawdown*100).toFixed(1)}% — liquidating all positions`, 'WARN');
-    let nb = balance, np = {};
-    for (const [sym, pos] of Object.entries(portfolio)) {
-      const px = prices[sym]?.price;
-      if (!px) continue;
-      const gross = pos.qty * px, fee = gross * FEE, net = gross - fee;
-      nb += net;
-      const t = { type:'SELL', coin:sym, qty:pos.qty, price:px, gross, fee, netProceeds:net,
-        pnl: net - pos.qty * pos.avgCost, strategy:'STOP_LOSS', confidence:10,
-        signals:['MAX_DRAWDOWN'], reasoning:'Emergency drawdown liquidation.' };
-      await Trades.insert(userId, t, botId).catch(() => {});
-      ulog(botId, userId, `EMERGENCY SELL ${sym} @ $${px.toFixed(4)}`, 'TRADE');
+    // Fetch prices
+    let prices = {};
+    try {
+      prices = await fetchPrices(botId);
+      botPrices.set(botId, prices);
+      displayPrices.set(userId, prices);
+      broadcastToUser(userId, { type:'PRICES', prices });
+    } catch(e) {
+      ulog(botId, userId, `Price fetch failed: ${e.message}`, 'ERROR');
+      return;
     }
-    setMem(botId, { balance: +nb.toFixed(8), portfolio: np, peakValue, status: 'running' });
+
+    const settings = {
+      tradingStrategy:bot.strategy, botMode:bot.botMode,
+      maxTradeUSD:bot.maxTradeUSD, stopLossPct:bot.stopLossPct,
+      takeProfitPct:bot.takeProfitPct, maxDrawdownPct:bot.maxDrawdownPct,
+      maxPositionPct:bot.maxPositionPct, leverageEnabled:bot.leverageEnabled,
+      maxLeverage:bot.maxLeverage,
+    };
+
+    const portfolio = ms.portfolio || {};
+    const balance   = ms.balance;
+    const tv        = calcTotalValue(prices, portfolio, balance);
+    const peakValue = Math.max(ms.peakValue||tv, tv);
+    const drawdown  = peakValue>0?(peakValue-tv)/peakValue:0;
+
+    ulog(botId, userId, `Portfolio: $${tv.toFixed(2)} | Cash: $${balance.toFixed(2)} | DD: ${(drawdown*100).toFixed(1)}%`, 'INFO');
+
+    // Emergency drawdown exit
+    if (drawdown>=bot.maxDrawdownPct && Object.keys(portfolio).length>0) {
+      ulog(botId, userId, `⚠ MAX DRAWDOWN ${(drawdown*100).toFixed(1)}% — liquidating all`, 'WARN');
+      let nb=balance;
+      for (const [sym,pos] of Object.entries(portfolio)) {
+        const px=prices[sym]?.price; if(!px) continue;
+        const gross=pos.qty*px, fee=gross*FEE, net=gross-fee;
+        nb+=net;
+        const pnl=net-pos.qty*pos.avgCost;
+        await Trades.insert(userId,{type:'SELL',coin:sym,qty:pos.qty,price:px,gross,fee,netProceeds:net,pnl,strategy:'STOP_LOSS',confidence:10,signals:['MAX_DRAWDOWN'],reasoning:'Emergency drawdown liquidation.'},botId).catch(()=>{});
+        recordTrade(botId, bot.strategy, { signals:['MAX_DRAWDOWN'], pnl, pnlPct:(pnl/(pos.qty*pos.avgCost))*100, holdMinutes:0 });
+      }
+      setMem(botId, { balance:+nb.toFixed(8), portfolio:{}, peakValue, status:'running' });
+      await syncBot(botId);
+      await broadcastBotState(userId);
+      return;
+    }
+
+    // ── CHECK EXITS ──────────────────────────────────────────────────────────
+    let updatedPortfolio = { ...portfolio };
+    let updatedBalance   = balance;
+    let updatedFees      = ms.totalFees||0;
+
+    for (const [sym,pos] of Object.entries(portfolio)) {
+      const exit = evaluateExit(botId, sym, pos, prices, settings);
+      if (!exit) {
+        const px=prices[sym]?.price||0;
+        const pnlPct=pos.avgCost?((px-pos.avgCost)/pos.avgCost*100).toFixed(2):'—';
+        ulog(botId, userId, `  HOLD ${sym} | P&L: ${pnlPct}% | trend intact`, 'HOLD');
+        continue;
+      }
+
+      const px=prices[sym]?.price; if(!px) continue;
+      const sellQty=pos.qty*exit.sellPct;
+      const gross=sellQty*px, fee=gross*FEE, net=gross-fee;
+      const pnl=(net-sellQty*pos.avgCost)*(pos.leverage||1);
+
+      updatedBalance=+(updatedBalance+net).toFixed(8);
+      updatedFees+=fee;
+
+      const remaining=pos.qty-sellQty;
+      if(remaining<0.000001) delete updatedPortfolio[sym];
+      else updatedPortfolio[sym]={...pos,qty:remaining};
+
+      const t={type:'SELL',coin:sym,qty:sellQty,price:px,gross,fee,netProceeds:net,pnl,
+        leverage:pos.leverage||1, strategy:exit.strategy, confidence:exit.confidence,
+        signals:exit.signals, reasoning:exit.reasoning};
+      await Trades.insert(userId, t, botId).catch(()=>{});
+
+      // ★ LEARNING ENGINE — record every sell outcome
+      const holdMinutes=pos.entryTime?Math.round((Date.now()-new Date(pos.entryTime))/60000):0;
+      const pnlPct=pos.avgCost>0?(pnl/(sellQty*pos.avgCost))*100:0;
+      recordTrade(botId, bot.strategy, { signals:exit.signals, pnl, pnlPct, holdMinutes });
+
+      setMem(botId, { balance:updatedBalance, portfolio:updatedPortfolio, peakValue, totalFees:updatedFees });
+      ulog(botId, userId, `${pnl>=0?'✅':'❌'} SELL ${sellQty.toFixed(5)} ${sym} @ $${px.toFixed(4)} | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(3)} | ${exit.strategy}`, pnl>=0?'PROFIT':'LOSS');
+    }
+
+    // ── SCAN FOR ENTRIES ────────────────────────────────────────────────────
+    const currentBalance  = botMem.get(botId)?.balance ?? updatedBalance;
+    const currentPortfolio= botMem.get(botId)?.portfolio ?? updatedPortfolio;
+
+    if (currentBalance<10) {
+      ulog(botId, userId, `Insufficient cash ($${currentBalance.toFixed(2)}) — holding`, 'HOLD');
+    } else {
+      ulog(botId, userId, `Scanning ${COINS.length} coins for ${bot.strategy} entry (min confidence 8/10)...`, 'SIGNAL');
+
+      const scored = [];
+      for (const {symbol} of COINS) {
+        try {
+          const result = scoreForBuy(botId, symbol, prices, currentPortfolio, tv, settings, cycleNum);
+          if (result.score > 0) {
+            ulog(botId, userId, `  ${symbol}: score=${result.score.toFixed(1)} min=${result.minScore} conf=${result.confidence?.toFixed(1)||'—'}/10`, 'INFO');
+          }
+          // Require confidence ≥ 8/10
+          const confMet = result.confidence >= 8;
+          if (result.score>=result.minScore && confMet) {
+            scored.push({symbol, ...result});
+          } else if (result.score>=result.minScore) {
+            ulog(botId, userId, `  ${symbol}: score qualifies but confidence ${result.confidence?.toFixed(1)}/10 < 8 — skipping`, 'INFO');
+          }
+        } catch(e) {
+          ulog(botId, userId, `Score error ${symbol}: ${e.message}`, 'ERROR');
+        }
+      }
+
+      scored.sort((a,b)=>b.score-a.score);
+      ulog(botId, userId, `${scored.length} high-confidence setups found (8/10+ required)`, 'SIGNAL');
+
+      if (scored.length>0) {
+        const best = scored[0];
+        ulog(botId, userId, `Best: ${best.symbol} score=${best.score.toFixed(1)} conf=${best.confidence?.toFixed(1)}/10 | ${best.signals.slice(0,3).join(', ')}`, 'SIGNAL');
+
+        let confirmed = true;
+        let reasoning = `${best.strategy} on ${best.symbol}. Score: ${best.score.toFixed(1)}, Confidence: ${best.confidence?.toFixed(1)}/10. Signals: ${best.signals.join(', ')}.`;
+
+        // Gemini confirmation for any qualifying trade (free API)
+        if (GEMINI_KEY) {
+          ulog(botId, userId, `Requesting Gemini confirmation for ${best.symbol}...`, 'AI');
+          const learningStats = getLearningStats(botId, bot.strategy);
+          const ai = await callGemini(
+            `You are a crypto trading risk manager. Confirm this ${bot.strategy} trade signal.\n` +
+            `COIN: ${best.symbol}\nSCORE: ${best.score.toFixed(1)}/${best.minScore} (confidence: ${best.confidence?.toFixed(1)}/10)\n` +
+            `SIGNALS: ${best.signals.join(', ')}\n` +
+            `LEARNING: This bot has ${learningStats.totalTrades} past trades, ${learningStats.winRate}% win rate\n` +
+            `Best signals historically: ${JSON.stringify(learningStats.bestSignals)}\n` +
+            `Reply ONLY with JSON: {"confirm":true,"reasoning":"1 sentence max"}`
+          );
+          if (ai) {
+            confirmed = ai.confirm !== false;
+            if (ai.reasoning) reasoning = `AI: ${ai.reasoning}`;
+            ulog(botId, userId, `Gemini: ${confirmed?'✅ CONFIRMED':'❌ REJECTED'} — ${ai.reasoning}`, 'AI');
+          }
+        }
+
+        if (confirmed) {
+          // Conservative sizing based on confidence
+          const conf = best.confidence || 8;
+          const baseK = bot.strategy==='DCA_PLUS'?0.12:bot.strategy==='AGGRESSIVE'?0.22:0.18;
+          const confMult = Math.min(1.4, conf/8); // scales from 1.0 to 1.4 based on confidence
+          const rawSpend = baseK*confMult*currentBalance;
+          const spend = +Math.min(rawSpend, bot.maxTradeUSD, currentBalance-5).toFixed(2);
+
+          if (spend>=10) {
+            const px=prices[best.symbol]?.price;
+            if (px) {
+              const fee=spend*FEE, net=spend-fee, qty=net/px;
+              const newBal=+(currentBalance-spend).toFixed(8);
+              const newPort={...currentPortfolio};
+              const existing=newPort[best.symbol];
+              if(existing){
+                const nq=existing.qty+qty;
+                newPort[best.symbol]={qty:nq,avgCost:(existing.qty*existing.avgCost+net)/nq,entryTime:existing.entryTime,leverage:1,peakPrice:px};
+              } else {
+                newPort[best.symbol]={qty,avgCost:px,entryTime:new Date().toISOString(),leverage:1,peakPrice:px};
+              }
+
+              const t={type:'BUY',coin:best.symbol,qty,price:px,gross:spend,fee,netProceeds:net,
+                strategy:best.strategy, confidence:Math.round(best.confidence||8),
+                signals:best.signals, reasoning};
+              await Trades.insert(userId, t, botId).catch(e=>ulog(botId,userId,`Trade insert: ${e.message}`,'ERROR'));
+              setCooldown(botId, best.symbol, cycleNum);
+              setMem(botId, { balance:newBal, portfolio:newPort, peakValue, totalFees:(botMem.get(botId)?.totalFees||0)+fee });
+              ulog(botId, userId, `✅ BUY ${qty.toFixed(5)} ${best.symbol} @ $${px.toFixed(4)} | $${spend.toFixed(2)} | conf:${best.confidence?.toFixed(1)}/10`, 'TRADE');
+            }
+          } else {
+            ulog(botId, userId, `Spend too small ($${spend.toFixed(2)}) — need $10 min`, 'HOLD');
+          }
+        }
+      } else {
+        ulog(botId, userId, `No setups met 8/10 confidence threshold. Waiting for better conditions.`, 'HOLD');
+      }
+    }
+
+    // Finalize
+    setMem(botId, { status:'running', peakValue });
     await syncBot(botId);
     await broadcastBotState(userId);
-    return;
+
+  } finally {
+    // ALWAYS release the cycle lock
+    cyclingBots.delete(botId);
+    clearTimeout(cycleTimeouts.get(botId));
+    cycleTimeouts.delete(botId);
   }
-
-  // ── Check exits on open positions ─────────────────────────────────────────────
-  let updatedPortfolio = { ...portfolio };
-  let updatedBalance   = balance;
-  let updatedFees      = ms.totalFees || 0;
-
-  for (const [sym, pos] of Object.entries(portfolio)) {
-    const exit = evaluateExit(botId, sym, pos, prices, settings); // botId = key
-    if (!exit) {
-      ulog(botId, userId, `${sym}: trend intact — holding`, 'HOLD');
-      continue;
-    }
-    const px = prices[sym]?.price;
-    if (!px) continue;
-    const sellQty = pos.qty * exit.sellPct;
-    const gross   = sellQty * px;
-    const fee     = gross * FEE;
-    const net     = gross - fee;
-    const pnl     = (net - sellQty * pos.avgCost) * (pos.leverage || 1);
-
-    updatedBalance = +(updatedBalance + net).toFixed(8);
-    updatedFees   += fee;
-
-    const remaining = pos.qty - sellQty;
-    if (remaining < 0.000001) delete updatedPortfolio[sym];
-    else updatedPortfolio[sym] = { ...pos, qty: remaining };
-
-    const t = {
-      type: 'SELL', coin: sym, qty: sellQty, price: px,
-      gross, fee, netProceeds: net, pnl,
-      leverage:   pos.leverage || 1,
-      strategy:   exit.strategy,
-      confidence: exit.confidence,
-      signals:    exit.signals,
-      reasoning:  exit.reasoning,
-    };
-    await Trades.insert(userId, t, botId).catch(() => {});
-    // Record outcome in learning engine
-    if (pos.avgCost && cur) {
-      const pnlPct = (pnl / (sellQty * pos.avgCost)) * 100;
-      const holdMinutes = pos.entryTime ? Math.round((Date.now() - new Date(pos.entryTime)) / 60000) : 0;
-      recordTrade(botId, bot.strategy, { signals: exit.signals, pnl, pnlPct, holdMinutes });
-    }
-    setMem(botId, { balance: updatedBalance, portfolio: updatedPortfolio, peakValue, totalFees: updatedFees });
-    ulog(botId, userId, `✅ SELL ${sellQty.toFixed(5)} ${sym} @ $${px.toFixed(4)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(3)} | ${exit.strategy}`, pnl >= 0 ? 'PROFIT' : 'LOSS');
-  }
-
-  // ── Score all coins for entry ─────────────────────────────────────────────────
-  const currentBalance  = botMem.get(botId)?.balance ?? updatedBalance;
-  const currentPortfolio= botMem.get(botId)?.portfolio ?? updatedPortfolio;
-
-  if (currentBalance < 5) {
-    ulog(botId, userId, `Insufficient cash ($${currentBalance.toFixed(2)}) — holding`, 'HOLD');
-  } else {
-    ulog(botId, userId, `Scanning ${COINS.length} coins for ${bot.strategy} setups...`, 'SIGNAL');
-
-    const scored = [];
-    for (const { symbol } of COINS) {
-      try {
-        const result = scoreForBuy(botId, symbol, prices, currentPortfolio, tv, settings, cycleNum); // botId key
-        ulog(botId, userId, `  ${symbol}: score=${result.score.toFixed(1)} min=${result.minScore} signals=${result.signals?.slice(0,2).join(',')||'none'}`, 'INFO');
-        if (result.score >= result.minScore) {
-          scored.push({ symbol, ...result });
-        }
-      } catch (e) {
-        ulog(botId, userId, `Score error for ${symbol}: ${e.message}`, 'ERROR');
-      }
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-    ulog(botId, userId, `${scored.length} qualifying setups (min score ${STRATEGIES?.[bot.strategy]?.minScore || 'n/a'})`, 'SIGNAL');
-
-    if (scored.length > 0) {
-      const best = scored[0];
-      ulog(botId, userId, `Best setup: ${best.symbol} score=${best.score.toFixed(1)} | ${best.signals.join(', ')}`, 'SIGNAL');
-
-      let confirmed = true;
-      let reasoning = `${best.strategy} on ${best.symbol}. Score ${best.score.toFixed(1)}. Signals: ${best.signals.join(', ')}.`;
-
-      // Gemini confirmation only for very high scores (optional)
-      if (GEMINI_KEY && best.score >= (best.minScore || 6) * 1.5) {
-        ulog(botId, userId, `Requesting Gemini confirmation for ${best.symbol}...`, 'AI');
-        const ai = await callGemini(
-          `Confirm ${bot.strategy} crypto trade: BUY ${best.symbol}.\nScore: ${best.score.toFixed(1)}\nSignals: ${best.signals.join(', ')}\nReply JSON only: {"confirm":true,"reasoning":"1 sentence"}`
-        );
-        if (ai) {
-          confirmed = ai.confirm !== false;
-          if (ai.reasoning) reasoning = ai.reasoning;
-          ulog(botId, userId, `Gemini: ${confirmed ? 'CONFIRMED' : 'REJECTED'} — ${ai.reasoning}`, 'AI');
-        }
-      }
-
-      if (confirmed) {
-        // Kelly-style sizing
-        const baseK = bot.strategy === 'AGGRESSIVE' ? 0.28 : bot.strategy === 'DCA_PLUS' ? 0.12 : 0.20;
-        const confMult = Math.min(1.5, best.score / (best.minScore || 6));
-        const rawSpend = baseK * confMult * currentBalance;
-        const spend = +Math.min(rawSpend, bot.maxTradeUSD, currentBalance - 2).toFixed(2);
-
-        ulog(botId, userId, `Sizing: baseK=${baseK} confMult=${confMult.toFixed(2)} rawSpend=$${rawSpend.toFixed(2)} finalSpend=$${spend.toFixed(2)}`, 'INFO');
-
-        if (spend >= 5) {
-          const px = prices[best.symbol]?.price;
-          if (px) {
-            const fee = spend * FEE;
-            const net = spend - fee;
-            const qty = net / px;
-            const newBal = +(currentBalance - spend).toFixed(8);
-
-            const newPort = { ...currentPortfolio };
-            const existing = newPort[best.symbol];
-            if (existing) {
-              const nq = existing.qty + qty;
-              newPort[best.symbol] = { qty: nq, avgCost: (existing.qty * existing.avgCost + net) / nq, entryTime: existing.entryTime, leverage: 1 };
-            } else {
-              newPort[best.symbol] = { qty, avgCost: px, entryTime: new Date().toISOString(), leverage: 1 };
-            }
-
-            const t = {
-              type: 'BUY', coin: best.symbol, qty, price: px,
-              gross: spend, fee, netProceeds: net,
-              strategy:   best.strategy,
-              confidence: Math.min(10, Math.round(best.score * 0.7)),
-              signals:    best.signals,
-              reasoning,
-              source: GEMINI_KEY ? 'AI' : 'RULES',
-            };
-            await Trades.insert(userId, t, botId).catch(e => ulog(botId, userId, `Trade insert error: ${e.message}`, 'ERROR'));
-            setCooldown(botId, best.symbol, cycleNum); // prevent re-buying same coin for 5 cycles
-            setMem(botId, { balance: newBal, portfolio: newPort, peakValue, totalFees: (botMem.get(botId)?.totalFees || 0) + fee });
-            ulog(botId, userId, `✅ BUY ${qty.toFixed(5)} ${best.symbol} @ $${px.toFixed(4)} | Spent $${spend.toFixed(2)} | Fee $${fee.toFixed(3)} | [${bot.name}]`, 'TRADE');
-          } else {
-            ulog(botId, userId, `No price for ${best.symbol} — skipping`, 'WARN');
-          }
-        } else {
-          ulog(botId, userId, `Spend too small ($${spend.toFixed(2)}) — need $5 minimum`, 'HOLD');
-        }
-      }
-    } else {
-      ulog(botId, userId, `No qualifying setups found. Market conditions not meeting ${bot.strategy} criteria.`, 'HOLD');
-    }
-  }
-
-  // ── Finalize ─────────────────────────────────────────────────────────────────
-  setMem(botId, { status: 'running', peakValue });
-  await syncBot(botId);
-  await broadcastBotState(userId);
 }
 
-// ── Broadcast full bot state to user ─────────────────────────────────────────
+// ── Broadcast ─────────────────────────────────────────────────────────────────
 export async function broadcastBotState(userId) {
   try {
     const summary = await getBotsSummary(userId);
     const prices  = displayPrices.get(userId) || {};
-    broadcastToUser(userId, { type: 'BOTS_UPDATE', bots: summary, prices });
-  } catch (e) {
-    console.error('[BotMgr] broadcastBotState error:', e.message);
-  }
+    broadcastToUser(userId, { type:'BOTS_UPDATE', bots:summary, prices });
+  } catch(e) { console.error('[BotMgr] broadcast error:', e.message); }
 }
 
-// ── Public bot control ────────────────────────────────────────────────────────
+// ── Public controls ───────────────────────────────────────────────────────────
 export async function startBot(botId) {
-  if (botTimers.has(botId)) return { ok: false, error: 'Already running' };
+  if (botTimers.has(botId)) return { ok:false, error:'Already running' };
+  const bot = await Bots.findById(botId).catch(()=>null);
+  if (!bot) return { ok:false, error:'Bot not found' };
 
-  const bot = await Bots.findById(botId).catch(() => null);
-  if (!bot) return { ok: false, error: 'Bot not found (run schema_v2.sql in Supabase)' };
+  // Cycle every 90 seconds by default (higher quality entries)
+  const CYCLE_MS = parseInt(process.env.CYCLE_INTERVAL_SECONDS||'90')*1000;
 
-  const CYCLE_MS = parseInt(process.env.CYCLE_INTERVAL_SECONDS || '60') * 1000;
-
-  // Init memory from DB state
   getMem(botId, bot);
-  await Bots.update(botId, { enabled: true, status: 'running', startedAt: new Date().toISOString() }).catch(() => {});
+  await Bots.update(botId, { enabled:true, status:'running', startedAt:new Date().toISOString() }).catch(()=>{});
+  ulog(botId, bot.userId, `▶ [${bot.name}] starting | ${bot.strategy} | Mode: ${bot.botMode} | Balance: $${bot.balance} | Cycle: ${CYCLE_MS/1000}s`, 'SYSTEM');
 
-  ulog(botId, bot.userId, `▶ [${bot.name}] starting | Strategy: ${bot.strategy} | Mode: ${bot.botMode} | Balance: $${bot.balance}`, 'SYSTEM');
-
-  // CRITICAL: Seed price history FIRST with botId as key
-  // This ensures algorithm functions have history before cycle 1
-  ulog(botId, bot.userId, `⏳ Pre-seeding 80 candles for all ${COINS.length} coins...`, 'SYSTEM');
+  // Seed price history first
+  ulog(botId, bot.userId, `⏳ Seeding 100 candles for ${COINS.length} coins...`, 'SYSTEM');
   try {
-    const seeded = await seedPriceHistory(botId); // botId is the key
-    ulog(botId, bot.userId, `✅ Seeded history for ${seeded} coins — ready to trade`, 'SYSTEM');
-  } catch (e) {
-    ulog(botId, bot.userId, `⚠️ Seed failed: ${e.message} — bot will build history naturally`, 'WARN');
+    const seeded = await seedPriceHistory(botId);
+    ulog(botId, bot.userId, `✅ Seeded ${seeded} coins — ready to trade`, 'SYSTEM');
+  } catch(e) {
+    ulog(botId, bot.userId, `⚠ Seed partial: ${e.message}`, 'WARN');
   }
 
   // Start cycle timer
-  const cycleTimer = setInterval(() => runBotCycle(botId, bot.userId), CYCLE_MS);
+  const cycleTimer = setInterval(()=>runBotCycle(botId, bot.userId), CYCLE_MS);
   botTimers.set(botId, cycleTimer);
 
-  // Start display price refresh (for dashboard)
+  // Display price refresh every 15s (independent of cycle)
   if (!priceTimers.has(bot.userId)) {
-    const pt = setInterval(async () => {
-      try {
-        // Fetch fresh 24hr ticker for display (separate from algorithm history)
-        const prices = botPrices.get(botId) || {};
-        if (Object.keys(prices).length) {
-          displayPrices.set(bot.userId, prices);
-          broadcastToUser(bot.userId, { type: 'PRICES', prices });
-        }
-      } catch {}
-    }, 10000);
+    const pt = setInterval(async()=>{
+      const prices=botPrices.get(botId)||{};
+      if (Object.keys(prices).length) {
+        displayPrices.set(bot.userId, prices);
+        broadcastToUser(bot.userId, { type:'PRICES', prices });
+      }
+    }, 15000);
     priceTimers.set(bot.userId, pt);
   }
 
-  // Run first cycle after 3 seconds (history is seeded, should trade immediately)
-  setTimeout(() => runBotCycle(botId, bot.userId), 3000);
-
-  ulog(botId, bot.userId, `✅ Bot started — first cycle in 3s, then every ${CYCLE_MS/1000}s`, 'SYSTEM');
-  return { ok: true };
+  // First cycle after 5 seconds
+  setTimeout(()=>runBotCycle(botId, bot.userId), 5000);
+  ulog(botId, bot.userId, `✅ Ready — first cycle in 5s, then every ${CYCLE_MS/1000}s`, 'SYSTEM');
+  return { ok:true };
 }
 
 export async function stopBot(botId) {
-  clearInterval(botTimers.get(botId));
-  botTimers.delete(botId);
-  setMem(botId, { status: 'stopped' });
-  await Bots.update(botId, { enabled: false, status: 'stopped' }).catch(() => {});
-  const bot = await Bots.findById(botId).catch(() => null);
+  clearInterval(botTimers.get(botId)); botTimers.delete(botId);
+  cyclingBots.delete(botId);
+  clearTimeout(cycleTimeouts.get(botId)); cycleTimeouts.delete(botId);
+  setMem(botId, { status:'stopped' });
+  await Bots.update(botId, { enabled:false, status:'stopped' }).catch(()=>{});
+  const bot = await Bots.findById(botId).catch(()=>null);
   if (bot) {
     ulog(botId, bot.userId, `◼ [${bot.name}] stopped`, 'SYSTEM');
-    // Stop price timer if no bots running for this user
-    const userBots = await Bots.forUser(bot.userId).catch(() => []);
-    const anyRunning = userBots.some(b => botTimers.has(b.id));
-    if (!anyRunning) { clearInterval(priceTimers.get(bot.userId)); priceTimers.delete(bot.userId); }
+    const userBots = await Bots.forUser(bot.userId).catch(()=>[]);
+    if (!userBots.some(b=>botTimers.has(b.id))) {
+      clearInterval(priceTimers.get(bot.userId)); priceTimers.delete(bot.userId);
+    }
   }
-  return { ok: true };
+  return { ok:true };
 }
 
 export async function resetBot(botId) {
   await stopBot(botId);
-  const bot = await Bots.findById(botId).catch(() => null);
+  const bot = await Bots.findById(botId).catch(()=>null);
   if (!bot) return;
-  const s = bot.startingBalance || 100;
-  botMem.set(botId, { balance: s, startingBalance: s, portfolio: {}, peakValue: s, cycleCount: 0, totalFees: 0, status: 'idle', startedAt: null, lastCycleAt: null });
-  await Bots.resetBot(botId).catch(() => {});
-  ulog(botId, bot.userId, `↺ [${bot.name}] reset — $${s}`, 'SYSTEM');
+  const s=bot.startingBalance||100;
+  botMem.set(botId,{balance:s,startingBalance:s,portfolio:{},peakValue:s,cycleCount:0,totalFees:0,status:'idle',startedAt:null,lastCycleAt:null});
+  await Bots.resetBot(botId).catch(()=>{});
+  ulog(botId, bot.userId, `↺ [${bot.name}] reset to $${s}`, 'SYSTEM');
   await broadcastBotState(bot.userId);
 }
 
 export async function createBot(userId, data) {
-  const existing = await Bots.forUser(userId).catch(() => []);
-  if (existing.length >= MAX_BOTS_PER_USER) throw new Error(`Max ${MAX_BOTS_PER_USER} bots per account`);
+  const existing = await Bots.forUser(userId).catch(()=>[]);
+  if (existing.length>=MAX_BOTS) throw new Error(`Max ${MAX_BOTS} bots per account`);
   return Bots.create(userId, data);
 }
 
 export async function getBotsSummary(userId) {
-  const bots   = await Bots.forUser(userId).catch(() => []);
+  const bots = await Bots.forUser(userId).catch(()=>[]);
   const result = [];
   for (const bot of bots) {
     const ms     = botMem.get(bot.id);
     const bal    = ms?.balance    ?? bot.balance;
     const port   = ms?.portfolio  ?? bot.portfolio;
-    const prices = botPrices.get(bot.id) || displayPrices.get(userId) || {};
+    const prices = botPrices.get(bot.id)||displayPrices.get(userId)||{};
     const tv     = calcTotalValue(prices, port, bal);
-    const trades = await Trades.forBot(bot.id, 100).catch(() => []);
-    const logs   = await BotLogs.getRecent(bot.id, 80).catch(() => []);
+    const trades = await Trades.forBot(bot.id, 100).catch(()=>[]);
+    const logs   = await BotLogs.getRecent(bot.id, 80).catch(()=>[]);
+    const learning = getLearningStats(bot.id, bot.strategy);
     result.push({
-      ...bot,
-      balance:    bal,
-      portfolio:  port,
-      totalValue: tv,
-      peakValue:  ms?.peakValue  ?? bot.peakValue,
-      cycleCount: ms?.cycleCount ?? bot.cycleCount,
-      totalFees:  ms?.totalFees  ?? bot.totalFees,
-      status:     ms?.status     ?? bot.status,
-      pnl:        tv - bot.startingBalance,
-      pnlPct:     ((tv / (bot.startingBalance || 100)) - 1) * 100,
-      trades,
-      logs,
+      ...bot, balance:bal, portfolio:port, totalValue:tv,
+      peakValue:ms?.peakValue??bot.peakValue, cycleCount:ms?.cycleCount??bot.cycleCount,
+      totalFees:ms?.totalFees??bot.totalFees, status:ms?.status??bot.status,
+      pnl:tv-bot.startingBalance, pnlPct:((tv/(bot.startingBalance||100))-1)*100,
+      trades, logs, learning,
     });
   }
   return result;
 }
 
 export async function getBotState(userId) {
-  const bots   = await getBotsSummary(userId).catch(() => []);
-  const prices = displayPrices.get(userId) || botPrices.get([...botTimers.keys()][0]) || {};
-  const logs   = bots[0] ? await BotLogs.getRecent(bots[0].id, 100).catch(() => []) : [];
-  return { bots, prices, botLog: logs, strategies: STRATEGY_LIST };
+  const bots   = await getBotsSummary(userId).catch(()=>[]);
+  const prices = displayPrices.get(userId)||botPrices.get([...botTimers.keys()][0])||{};
+  const logs   = bots[0]?await BotLogs.getRecent(bots[0].id,100).catch(()=>[]):[];
+  return { bots, prices, botLog:logs, strategies:STRATEGY_LIST };
 }
 
 export async function applyStartingBalance(userId, amount) {
-  const bots = await Bots.forUser(userId).catch(() => []);
+  const bots = await Bots.forUser(userId).catch(()=>[]);
   for (const bot of bots) {
     if (!botTimers.has(bot.id)) {
-      await Bots.update(bot.id, { balance: amount, startingBalance: amount, peakValue: amount, portfolio: {}, cycleCount: 0, totalFees: 0 }).catch(() => {});
+      await Bots.update(bot.id,{balance:amount,startingBalance:amount,peakValue:amount,portfolio:{},cycleCount:0,totalFees:0}).catch(()=>{});
       if (botMem.has(bot.id)) {
-        const ms = botMem.get(bot.id);
-        botMem.set(bot.id, { ...ms, balance: amount, startingBalance: amount, peakValue: amount, portfolio: {} });
+        const ms=botMem.get(bot.id);
+        botMem.set(bot.id,{...ms,balance:amount,startingBalance:amount,peakValue:amount,portfolio:{}});
       }
-      await Trades.deleteForBot(bot.id).catch(() => {});
+      await Trades.deleteForBot(bot.id).catch(()=>{});
       BotLogs.clearForBot(bot.id);
     }
   }
 }
 
 export async function restoreActiveBots() {
-  const users = await Users.all().catch(() => []);
-  let count = 0;
+  const users = await Users.all().catch(()=>[]);
+  let count=0;
   for (const u of users) {
-    const bots = await Bots.forUser(u.id).catch(() => []);
+    const bots = await Bots.forUser(u.id).catch(()=>[]);
     for (const bot of bots) {
-      if (bot.enabled) {
-        setTimeout(() => startBot(bot.id), count++ * 2000);
-      }
+      if (bot.enabled) setTimeout(()=>startBot(bot.id), count++*2000);
     }
   }
   if (count) console.log(`[BotMgr] Restoring ${count} bots...`);
 }
 
-export function getUserPrices(userId) { return displayPrices.get(userId) || {}; }
+export function getUserPrices(userId) { return displayPrices.get(userId)||{}; }
 export function getStrategyList() { return STRATEGY_LIST; }
 export { STRATEGY_LIST };
-
-// Import STRATEGIES for minScore reference in logging
-import { STRATEGIES } from './algorithm.js';
-import { recordTrade, getLearningStats } from './learningEngine.js';

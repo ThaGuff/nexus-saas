@@ -75,7 +75,7 @@ app.get('*', (_, res) => {
 
 setupWebSocket(http);
 http.listen(PORT, () => {
-  console.log(`\n🚀 NEXUS v6.0 · Port ${PORT}`);
+  console.log(`\n🚀 PLEX Trader v1.0 · Port ${PORT}`);
   restoreActiveBots();
 });
 process.on('SIGTERM', async () => {

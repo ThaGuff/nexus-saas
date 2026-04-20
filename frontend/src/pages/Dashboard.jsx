@@ -5,7 +5,7 @@ import{useAuth,useBotSocket}from'../lib/auth.jsx';
 import{api}from'../lib/api.js';
 
 // ─────────────────────────────────────────────
-//  NEXUS SAAS · BUILD 2026-04-19
+//  PLEX TRADER · BUILD 2026-04-19
 //  DESIGN TOKENS
 // ─────────────────────────────────────────────
 const C={
@@ -402,7 +402,7 @@ const SettingsModal=memo(({user,plans=[],onClose})=>{
       </div>}
 
       {tab==='privacy'&&<div style={{color:C.tx2,fontSize:13,lineHeight:1.8}}>
-        {[['Data Collection','NEXUS collects your email, trading activity, and bot configuration to provide the service. We never sell your personal information.'],['API Key Security','Exchange API keys are encrypted with AES-256-CBC and never leave our servers. They are used solely to execute trades on your behalf.'],['Trading Data','Your trading history and performance data are stored securely and used only to provide analytics within your account.'],['Your Rights','Request deletion of your account and all data at any time: privacy@nexustrader.io. Processed within 30 days.']].map(([t,d])=>(
+        {[['Data Collection','NEXUS collects your email, trading activity, and bot configuration to provide the service. We never sell your personal information.'],['API Key Security','Exchange API keys are encrypted with AES-256-CBC and never leave our servers. They are used solely to execute trades on your behalf.'],['Trading Data','Your trading history and performance data are stored securely and used only to provide analytics within your account.'],['Your Rights','Request deletion of your account and all data at any time: privacy@plexautomation.io. Processed within 30 days.']].map(([t,d])=>(
           <div key={t}style={{marginBottom:16,paddingBottom:16,borderBottom:`1px solid ${C.b}`}}>
             <div style={{fontWeight:700,color:C.tx,marginBottom:5,fontSize:14}}>{t}</div>
             <div>{d}</div>
@@ -542,7 +542,7 @@ export default function Dashboard(){
 
   if(authLoading||!user)return(
     <div style={{height:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:C.bg,gap:16}}>
-      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:24,color:C.amber}}>NEXUS</div>
+      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:24,color:C.amber}}>PLEX Trader</div>
       <div style={{color:C.tx3,fontSize:13}}>Loading your dashboard…</div>
       <style>{css}</style>
     </div>
@@ -698,9 +698,9 @@ export default function Dashboard(){
       {/* ── TOP NAV ── */}
       <nav style={{position:'sticky',top:0,zIndex:100,background:'rgba(5,7,15,0.94)',backdropFilter:'blur(20px)',borderBottom:`1px solid ${C.b}`,padding:'0 16px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:'#000',boxShadow:`0 0 14px ${C.amber}35`}}>NX</div>
+          <div style={{width:32,height:32,background:`linear-gradient(135deg,${C.amber},${C.amber2})`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:'#000',boxShadow:`0 0 14px ${C.amber}35`}}>PX</div>
           <div>
-            <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:15,lineHeight:1}}>NEX<span style={{color:C.amber}}>US</span></div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:15,lineHeight:1}}>PLEX<span style={{color:C.amber}}>US</span></div>
             <div style={{display:'flex',alignItems:'center',gap:4,marginTop:1}}>
               <div style={{width:5,height:5,borderRadius:'50%',background:running>0?C.green:C.tx3,animation:running>0?'breathe 2s infinite':undefined}}/>
               <span style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace"}}>{running}/{bots.length} · {connected?'live':'reconnecting'}</span>

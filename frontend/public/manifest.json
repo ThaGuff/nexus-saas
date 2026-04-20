@@ -1,6 +1,6 @@
 {
-  "name": "NEXUS Trader",
-  "short_name": "NEXUS",
+  "name": "PLEX Trader",
+  "short_name": "PLEX Trader",
   "description": "Autonomous AI crypto trading bot. 7 strategies, 33 coins, 24/7.",
   "start_url": "/dashboard",
   "display": "standalone",

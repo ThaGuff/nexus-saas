@@ -33,7 +33,7 @@ export default function Register() {
 
   return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <Link to="/" style={{ color:C.green, fontWeight:800, fontSize:22, textDecoration:'none', marginBottom:32 }}>NEXUS</Link>
+      <Link to="/" style={{ color:C.green, fontWeight:800, fontSize:22, textDecoration:'none', marginBottom:32 }}>PLEX Trader</Link>
 
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'40px', width:'100%', maxWidth:460 }}>
         <h1 style={{ color:'#e8f4ff', fontSize:24, fontWeight:800, marginBottom:8 }}>Start Free Trial</h1>
@@ -60,7 +60,7 @@ export default function Register() {
           {/* Risk Disclosure Checkbox */}
           <div style={{ background:`#f0365a10`, border:`1px solid #f0365a30`, borderRadius:8, padding:'14px', marginBottom:20, marginTop:8 }}>
             <p style={{ color:'#d4a0a0', fontSize:12, lineHeight:1.7, marginBottom:12 }}>
-              <strong style={{ color:C.red }}>⚠ Risk Disclosure:</strong> Cryptocurrency trading involves substantial risk of financial loss. NEXUS is an automated tool, not a licensed financial adviser. You may lose some or all of your capital. Only invest what you can afford to lose. Past results do not guarantee future performance. NEXUS and its operators are not responsible for any trading losses.
+              <strong style={{ color:C.red }}>⚠ Risk Disclosure:</strong> Cryptocurrency trading involves substantial risk of financial loss. PLEX Trader is an automated tool, not a licensed financial adviser. You may lose some or all of your capital. Only invest what you can afford to lose. Past results do not guarantee future performance. PLEX Automation and its operators are not responsible for any trading losses.
             </p>
             <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop:2, accentColor:C.green }} />
