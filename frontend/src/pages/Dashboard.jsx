@@ -1445,7 +1445,7 @@ export default function Dashboard(){
                       <div style={{fontSize:11,color:C.tx3,marginBottom:6}}>{s.description||'No description'}</div>
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                         {s.minRsi&&<Pill c={C.cyan}>RSI >{s.minRsi}</Pill>}
-                        {s.maxRsi&&<Pill c={C.cyan}>RSI <{s.maxRsi}</Pill>}
+                        {s.maxRsi&&<Pill c={C.cyan}>{"RSI <"+s.maxRsi}</Pill>}
                         {s.requireMacdBull&&<Pill c={C.green}>MACD Bull</Pill>}
                         {s.requireBbLower&&<Pill c={C.violet}>BB Lower</Pill>}
                         {s.requireRsiUp&&<Pill c={C.amber}>RSI Rising</Pill>}
