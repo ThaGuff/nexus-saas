@@ -74,6 +74,15 @@ export function isOnCooldown(botKey, symbol, currentCycle) {
   return c !== undefined && (currentCycle - c) < COOLDOWN_CYCLES;
 }
 
+// Cleanup expired cooldowns to prevent memory growth
+export function cleanupCooldowns(botKey, currentCycle) {
+  const cd = cooldowns.get(botKey);
+  if (!cd) return;
+  for (const [sym, cycle] of Object.entries(cd)) {
+    if (currentCycle - cycle >= COOLDOWN_CYCLES) delete cd[sym];
+  }
+}
+
 // ── Price history seeding ──────────────────────────────────────────────────────
 export async function seedPriceHistory(botKey) {
   let seeded = 0;
@@ -608,6 +617,8 @@ export const STRATEGY_LIST = Object.entries(STRATEGIES).map(([key,s])=>({
 
 // ── Entry scoring with learning weights applied ────────────────────────────────
 export function scoreForBuy(botKey,symbol,prices,portfolio,totalValue,settings,cycleNum=0){
+  // Periodically clean expired cooldowns
+  if(cycleNum>0&&cycleNum%20===0) cleanupCooldowns(botKey,cycleNum);
   const stratKey=settings.tradingStrategy||'PRECISION';
   const strat=STRATEGIES[stratKey]||STRATEGIES.PRECISION;
   const ind=computeIndicators(botKey,symbol);

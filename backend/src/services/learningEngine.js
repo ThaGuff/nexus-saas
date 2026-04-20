@@ -76,7 +76,7 @@ export function recordTrade(botId, strategy, tradeResult) {
   }
 
   // Update signal analysis every 10 trades
-  if (state.stats.totalTrades % 10 === 0) {
+  if (state.stats.totalTrades % 5 === 0) {
     _updateWeights(state);
     _updateSignalAnalysis(state);
   }
@@ -153,7 +153,7 @@ function _updateWeights(state) {
 
     // Gradual adjustment: ±10% per cycle, clamped to [0.5, 1.8]
     const currentWeight = state.weights[type] ?? 1.0;
-    const adjustment = diff * 0.3; // conservative learning rate
+    const adjustment = diff * 0.5; // faster adaptation
     state.weights[type] = Math.max(0.5, Math.min(1.8, currentWeight + adjustment));
   }
 
@@ -163,10 +163,10 @@ function _updateWeights(state) {
     const defaultMin = state.thresholds.minScore ?? 7;
     if (recentWR < 0.45) {
       // Losing too much — tighten threshold
-      state.thresholds.minScore = Math.min(12, defaultMin + 0.5);
+      state.thresholds.minScore = Math.min(14, defaultMin + 1.0);
     } else if (recentWR > 0.70 && state.trades.length > 50) {
       // Winning well — can slightly relax
-      state.thresholds.minScore = Math.max(4, defaultMin - 0.25);
+      state.thresholds.minScore = Math.max(6, defaultMin - 0.5);
     }
   }
 }
