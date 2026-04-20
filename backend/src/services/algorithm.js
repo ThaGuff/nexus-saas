@@ -635,98 +635,121 @@ export function scoreForBuy(botKey,symbol,prices,portfolio,totalValue,settings,c
   return{score:finalScore,rawScore:score,signals:sigs||[],strategy,minScore:strat.minScore,ind,confidence};
 }
 
-// ── Exit evaluation — requires CONFIRMED downtrend, not just one signal ────────
+// ── Exit evaluation — leverage-aware, requires CONFIRMED downtrend ─────────────
 export function evaluateExit(botKey,symbol,pos,prices,settings){
   const ind=computeIndicators(botKey,symbol);
   const cur=prices[symbol]?.price;
   if(!cur||!pos) return null;
 
-  const sl=settings.stopLossPct||0.05;
-  const tp=settings.takeProfitPct||0.08;
-  const lev=pos.leverage||1;
-  const pnlPct=(cur-pos.avgCost)/pos.avgCost;
-  const eff=pnlPct*lev;
+  const lev = pos.leverage || 1;
+  const sl  = settings.stopLossPct  || 0.05;  // margin-level stop loss
+  const tp  = settings.takeProfitPct|| 0.08;  // margin-level take profit
+
+  // Price movement % since entry
+  const pricePct = (cur - pos.avgCost) / pos.avgCost;
+
+  // Effective return on margin (leveraged)
+  // At 20x: a 1% price move = 20% return on margin
+  const eff = pricePct * lev;
+
+  // The price level at which stop loss triggers (much tighter with leverage)
+  // At 20x with 5% margin SL: stop triggers at 0.25% adverse price move
+  const slPricePct = sl / lev; // price % that equals the margin SL threshold
 
   // Track peak price for trailing stop
-  if(!pos.peakPrice||cur>pos.peakPrice) pos.peakPrice=cur;
-  const runningPeak=pos.peakPrice||cur;
+  if (!pos.peakPrice || cur > pos.peakPrice) pos.peakPrice = cur;
+  const peakPricePct = (pos.peakPrice - pos.avgCost) / pos.avgCost;
+  const peakEffReturn = peakPricePct * lev;
 
-  // ── HARD STOP LOSS — always fires immediately ─────────────────────────────
-  if(eff<=-sl){
-    return{action:'SELL',sellPct:1.0,confidence:10,strategy:'STOP_LOSS',
-      signals:[`STOP_LOSS(${(eff*100).toFixed(2)}%)`],
-      reasoning:`Stop-loss at ${(eff*100).toFixed(2)}%. Entry $${pos.avgCost.toFixed(4)} → $${cur.toFixed(4)}.`};
+  // ── HARD STOP LOSS ─────────────────────────────────────────────────────────
+  if (pricePct <= -slPricePct) {
+    const lossOnMargin = eff * 100;
+    return {
+      action: 'SELL', sellPct: 1.0, confidence: 10, strategy: 'STOP_LOSS',
+      signals: [`STOP_LOSS(price:${(pricePct*100).toFixed(2)}%,margin:${lossOnMargin.toFixed(2)}%,${lev}x)`],
+      reasoning: lev > 1
+        ? `${lev}x leveraged stop-loss. Price moved ${(pricePct*100).toFixed(2)}% = ${lossOnMargin.toFixed(2)}% on margin. Entry $${pos.avgCost.toFixed(4)} → $${cur.toFixed(4)}.`
+        : `Stop-loss at ${(pricePct*100).toFixed(2)}%. Entry $${pos.avgCost.toFixed(4)} → $${cur.toFixed(4)}.`,
+    };
   }
 
-  // ── TRAILING STOP — protects large gains ──────────────────────────────────
-  if(runningPeak>pos.avgCost*(1+tp*1.5)){
-    const trailDrop=(runningPeak-cur)/runningPeak;
-    const trailThreshold = eff>tp*3?0.03:0.05; // tighter trail on big gains
-    if(trailDrop>trailThreshold){
-      return{action:'SELL',sellPct:0.8,confidence:9,strategy:'TRAIL_STOP',
-        signals:[`TRAIL_STOP(drop:${(trailDrop*100).toFixed(1)}%,peak:${(((runningPeak/pos.avgCost)-1)*100).toFixed(1)}%)`],
-        reasoning:`Trailing stop: pulled back ${(trailDrop*100).toFixed(1)}% from peak of +${(((runningPeak/pos.avgCost)-1)*100).toFixed(1)}%.`};
+  // ── TRAILING STOP — protects gains on margin basis ─────────────────────────
+  // Activate trailing stop when effective margin return exceeds 1.5× TP target
+  if (peakEffReturn >= tp * 1.5) {
+    const dropFromPeak = (pos.peakPrice - cur) / pos.peakPrice;
+    // Tighter trail with leverage (a small price drop = big margin loss)
+    const trailThreshold = lev > 1 ? Math.max(0.02, 0.04 / Math.sqrt(lev)) : 0.05;
+    if (dropFromPeak > trailThreshold) {
+      return {
+        action: 'SELL', sellPct: 0.8, confidence: 9, strategy: 'TRAIL_STOP',
+        signals: [`TRAIL_STOP(price_drop:${(dropFromPeak*100).toFixed(2)}%,peak_return:${(peakEffReturn*100).toFixed(1)}%_on_margin)`],
+        reasoning: `Trailing stop: price fell ${(dropFromPeak*100).toFixed(2)}% from peak. Peak margin return was +${(peakEffReturn*100).toFixed(1)}%.`,
+      };
     }
   }
 
-  // ── SCORE MULTIPLE EXIT SIGNALS — need CONFIRMED downtrend ────────────────
-  let exitScore=0; const exitSigs=[];
+  // ── SCORE EXIT SIGNALS — confirmed downtrend required ──────────────────────
+  let exitScore = 0;
+  const exitSigs = [];
 
-  // RSI overbought with reversal
-  if(ind.rsi!==null){
-    if(ind.rsi>82&&ind.rsiDn){exitScore+=6;exitSigs.push(`RSI_EXTREME_OB(${ind.rsi.toFixed(0)})↓`);}
-    else if(ind.rsi>75&&ind.rsiDn){exitScore+=4;exitSigs.push(`RSI_OB(${ind.rsi.toFixed(0)})↓`);}
-    else if(ind.rsi>70&&ind.rsiDn){exitScore+=2;exitSigs.push(`RSI_HIGH(${ind.rsi.toFixed(0)})↓`);}
-    // If in profit and RSI clearly falling
-    else if(ind.rsi>65&&ind.rsiDn&&eff>0.02){exitScore+=1;exitSigs.push('RSI_TURNING_DOWN');}
+  if (ind.rsi !== null) {
+    if (ind.rsi > 82 && ind.rsiDn) { exitScore += 6; exitSigs.push(`RSI_EXTREME_OB(${ind.rsi.toFixed(0)})↓`); }
+    else if (ind.rsi > 75 && ind.rsiDn) { exitScore += 4; exitSigs.push(`RSI_OB(${ind.rsi.toFixed(0)})↓`); }
+    else if (ind.rsi > 70 && ind.rsiDn) { exitScore += 2; exitSigs.push(`RSI_HIGH(${ind.rsi.toFixed(0)})↓`); }
+    else if (ind.rsi > 65 && ind.rsiDn && eff > 0.02) { exitScore += 1; exitSigs.push('RSI_TURNING_DOWN'); }
   }
 
-  // MACD bearish cross (must be a real cross, not just weak)
-  if(ind.macd&&!ind.macd.bullish&&ind.macd.histogram<-0.001){
-    exitScore+=4;exitSigs.push('MACD_BEAR_CROSS');
+  if (ind.macd && !ind.macd.bullish && ind.macd.histogram < -0.001) {
+    exitScore += 4; exitSigs.push('MACD_BEAR_CROSS');
+  }
+  if (ind.bb?.pct > 0.9)  { exitScore += 4; exitSigs.push('FAR_ABOVE_BB_UPPER'); }
+  else if (ind.bb?.pct > 0.7) { exitScore += 2; exitSigs.push('ABOVE_BB_UPPER'); }
+
+  if (ind.ema9 && ind.ema21 && ind.ema9 < ind.ema21 * 0.998) {
+    exitScore += 3; exitSigs.push('EMA_DEATH_CROSS');
+  }
+  if (ind.mom5 !== null && ind.mom5 < -1.5) { exitScore += 3; exitSigs.push(`MOM_CRASHING(${ind.mom5.toFixed(1)}%)`); }
+  else if (ind.mom5 !== null && ind.mom5 < -0.8) { exitScore += 1; exitSigs.push('MOM_NEGATIVE'); }
+
+  if (ind.stochRSI !== null && ind.stochRSI > 85 && ind.rsiDn) {
+    exitScore += 2; exitSigs.push('STOCH_OB');
   }
 
-  // Price well above BB upper (overextended)
-  if(ind.bb?.pct>0.9){exitScore+=4;exitSigs.push('FAR_ABOVE_BB_UPPER');}
-  else if(ind.bb?.pct>0.7){exitScore+=2;exitSigs.push('ABOVE_BB_UPPER');}
+  // With leverage, exit sooner when reversal signals appear — less room to wait
+  const exitScoreThreshold = lev > 1 ? Math.max(4, 9 - Math.floor(lev/5)) : 9;
 
-  // EMA death cross
-  if(ind.ema9&&ind.ema21&&ind.ema9<ind.ema21*0.998){exitScore+=3;exitSigs.push('EMA_DEATH_CROSS');}
-
-  // Momentum failing
-  if(ind.mom5!==null&&ind.mom5<-1.5){exitScore+=3;exitSigs.push(`MOM_CRASHING(${ind.mom5.toFixed(1)}%)`);}
-  else if(ind.mom5!==null&&ind.mom5<-0.8){exitScore+=1;exitSigs.push('MOM_NEGATIVE');}
-
-  // StochRSI very overbought and turning down
-  if(ind.stochRSI!==null&&ind.stochRSI>85&&ind.rsiDn){exitScore+=2;exitSigs.push('STOCH_OB');}
-
-  // ── EXIT DECISIONS — require HIGH confidence ───────────────────────────────
-  // Large profit + multiple reversal signals → partial exit
-  if(eff>=tp*2.5&&exitScore>=3){
-    return{action:'SELL',sellPct:0.5,confidence:9,strategy:'TAKE_PROFIT_LARGE',
-      signals:[`TP+${(eff*100).toFixed(1)}%`,...exitSigs],
-      reasoning:`+${(eff*100).toFixed(2)}% gain — taking 50% off table. ${exitScore} reversal signals.`};
+  // Take profit: margin return exceeded target + reversal confirmed
+  if (eff >= tp * 2.5 && exitScore >= 3) {
+    return {
+      action: 'SELL', sellPct: 0.5, confidence: 9, strategy: 'TAKE_PROFIT_LARGE',
+      signals: [`TP+${(eff*100).toFixed(1)}%_on_margin(${lev}x)`,...exitSigs],
+      reasoning: `+${(eff*100).toFixed(2)}% on margin (${lev}x). Taking 50% off table.`,
+    };
   }
-  // Good profit + clear reversal signals → exit most
-  if(eff>=tp&&exitScore>=6){
-    return{action:'SELL',sellPct:0.75,confidence:9,strategy:'TAKE_PROFIT',
-      signals:[`TP+${(eff*100).toFixed(1)}%`,...exitSigs],
-      reasoning:`Take profit +${(eff*100).toFixed(2)}% with confirmed reversal: ${exitSigs.join(', ')}.`};
+  if (eff >= tp && exitScore >= 5) {
+    return {
+      action: 'SELL', sellPct: 0.75, confidence: 9, strategy: 'TAKE_PROFIT',
+      signals: [`TP+${(eff*100).toFixed(1)}%_on_margin`,...exitSigs],
+      reasoning: `Take profit +${(eff*100).toFixed(2)}% on margin: ${exitSigs.join(', ')}.`,
+    };
   }
-  // Strong reversal confirmation even without full TP
-  if(exitScore>=9&&eff>0.005){
-    return{action:'SELL',sellPct:0.7,confidence:8,strategy:'REVERSAL_CONFIRMED',
-      signals:exitSigs,
-      reasoning:`Reversal confirmed (score ${exitScore}): ${exitSigs.join(', ')}. Exiting 70%.`};
+  // Leveraged positions exit on fewer reversal signals (risk control)
+  if (exitScore >= exitScoreThreshold && eff > 0.005) {
+    return {
+      action: 'SELL', sellPct: lev > 1 ? 0.8 : 0.7, confidence: 8, strategy: 'REVERSAL_CONFIRMED',
+      signals: exitSigs,
+      reasoning: `Reversal score ${exitScore} (threshold ${exitScoreThreshold} for ${lev}x): ${exitSigs.join(', ')}.`,
+    };
   }
-  // Full reversal in losing position — cut losses
-  if(exitScore>=8&&eff<-0.015){
-    return{action:'SELL',sellPct:1.0,confidence:8,strategy:'CUT_LOSS_CONFIRMED',
-      signals:exitSigs,
-      reasoning:`Confirmed downtrend in loss position (${(eff*100).toFixed(2)}%). Full exit.`};
+  if (exitScore >= 8 && eff < -0.015) {
+    return {
+      action: 'SELL', sellPct: 1.0, confidence: 8, strategy: 'CUT_LOSS_CONFIRMED',
+      signals: exitSigs,
+      reasoning: `Confirmed downtrend in loss (${(eff*100).toFixed(2)}% on margin). Full exit.`,
+    };
   }
 
-  return null; // Hold — no confirmed exit signal
+  return null;
 }
 
 export function calcTotalValue(prices,portfolio,balance){

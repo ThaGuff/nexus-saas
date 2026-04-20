@@ -179,35 +179,70 @@ async function runBotCycle(botId, userId) {
       const exit = evaluateExit(botId, sym, pos, prices, settings);
       if (!exit) {
         const px=prices[sym]?.price||0;
-        const pnlPct=pos.avgCost?((px-pos.avgCost)/pos.avgCost*100).toFixed(2):'—';
-        ulog(botId, userId, `  HOLD ${sym} | P&L: ${pnlPct}% | trend intact`, 'HOLD');
+        const lev=pos.leverage||1;
+        const pricePct=pos.avgCost?((px-pos.avgCost)/pos.avgCost*100).toFixed(2):'—';
+        const effPct=(pos.avgCost?(px-pos.avgCost)/pos.avgCost*lev*100:0).toFixed(2);
+        ulog(botId, userId, `  HOLD ${sym}${lev>1?` [${lev}x]`:''} | Price: ${pricePct}% | Effective: ${effPct}% | trend intact`, 'HOLD');
         continue;
       }
 
       const px=prices[sym]?.price; if(!px) continue;
-      const sellQty=pos.qty*exit.sellPct;
-      const gross=sellQty*px, fee=gross*FEE, net=gross-fee;
-      const pnl=(net-sellQty*pos.avgCost)*(pos.leverage||1);
+      const lev = pos.leverage || 1;
+      const sellQty = pos.qty * exit.sellPct;
 
-      updatedBalance=+(updatedBalance+net).toFixed(8);
-      updatedFees+=fee;
+      // PnL calculation with leverage:
+      // - margin committed = pos.marginSpent * sellPct (or estimate from avgCost/leverage)
+      // - price change % × leverage × margin = actual dollar PnL
+      const marginForSell = (pos.marginSpent || (pos.qty * pos.avgCost / lev)) * exit.sellPct;
+      const priceChangePct = (px - pos.avgCost) / pos.avgCost;
+      const pnl = priceChangePct * lev * marginForSell;
 
-      const remaining=pos.qty-sellQty;
-      if(remaining<0.000001) delete updatedPortfolio[sym];
-      else updatedPortfolio[sym]={...pos,qty:remaining};
+      // What comes back to balance: margin + pnl (minus fees on notional)
+      const notionalSell = sellQty * px;
+      const fee = notionalSell * FEE;
+      const returnedToBalance = marginForSell + pnl - fee;
+      const gross = notionalSell;
+      const net   = returnedToBalance;
 
-      const t={type:'SELL',coin:sym,qty:sellQty,price:px,gross,fee,netProceeds:net,pnl,
-        leverage:pos.leverage||1, strategy:exit.strategy, confidence:exit.confidence,
-        signals:exit.signals, reasoning:exit.reasoning};
+      updatedBalance = +(updatedBalance + Math.max(0, returnedToBalance)).toFixed(8);
+      updatedFees   += fee;
+
+      const remaining = pos.qty - sellQty;
+      const remainingMargin = (pos.marginSpent||marginForSell) - marginForSell;
+      if (remaining < 0.000001) {
+        delete updatedPortfolio[sym];
+      } else {
+        updatedPortfolio[sym] = { ...pos, qty:remaining, marginSpent:remainingMargin };
+      }
+
+      const t = {
+        type:'SELL', coin:sym, qty:sellQty, price:px,
+        gross, fee, netProceeds:net, pnl,
+        leverage:lev,
+        marginUsed: marginForSell,
+        priceChangePct: +(priceChangePct*100).toFixed(3),
+        effectivePct:   +(priceChangePct*lev*100).toFixed(3),
+        strategy:exit.strategy, confidence:exit.confidence,
+        signals:exit.signals, reasoning:exit.reasoning,
+      };
       await Trades.insert(userId, t, botId).catch(()=>{});
 
-      // ★ LEARNING ENGINE — record every sell outcome
-      const holdMinutes=pos.entryTime?Math.round((Date.now()-new Date(pos.entryTime))/60000):0;
-      const pnlPct=pos.avgCost>0?(pnl/(sellQty*pos.avgCost))*100:0;
+      // ★ LEARNING ENGINE
+      const holdMinutes = pos.entryTime ? Math.round((Date.now()-new Date(pos.entryTime))/60000) : 0;
+      const pnlPct = marginForSell > 0 ? (pnl/marginForSell)*100 : 0;
       recordTrade(botId, bot.strategy, { signals:exit.signals, pnl, pnlPct, holdMinutes });
 
       setMem(botId, { balance:updatedBalance, portfolio:updatedPortfolio, peakValue, totalFees:updatedFees });
-      ulog(botId, userId, `${pnl>=0?'✅':'❌'} SELL ${sellQty.toFixed(5)} ${sym} @ $${px.toFixed(4)} | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(3)} | ${exit.strategy}`, pnl>=0?'PROFIT':'LOSS');
+
+      if (lev > 1) {
+        ulog(botId, userId,
+          `${pnl>=0?'✅':'❌'} SELL ${sellQty.toFixed(5)} ${sym} @ $${px.toFixed(4)} | ${lev}x LEV | Price: ${(priceChangePct*100).toFixed(2)}% | Effective: ${(priceChangePct*lev*100).toFixed(2)}% | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(3)} | ${exit.strategy}`,
+          pnl>=0?'PROFIT':'LOSS');
+      } else {
+        ulog(botId, userId,
+          `${pnl>=0?'✅':'❌'} SELL ${sellQty.toFixed(5)} ${sym} @ $${px.toFixed(4)} | PnL: ${pnl>=0?'+':''}$${pnl.toFixed(3)} | ${exit.strategy}`,
+          pnl>=0?'PROFIT':'LOSS');
+      }
     }
 
     // ── SCAN FOR ENTRIES ────────────────────────────────────────────────────
@@ -268,37 +303,93 @@ async function runBotCycle(botId, userId) {
         }
 
         if (confirmed) {
-          // Conservative sizing based on confidence
-          const conf = best.confidence || 8;
-          const baseK = bot.strategy==='DCA_PLUS'?0.12:bot.strategy==='AGGRESSIVE'?0.22:0.18;
-          const confMult = Math.min(1.4, conf/8); // scales from 1.0 to 1.4 based on confidence
-          const rawSpend = baseK*confMult*currentBalance;
-          const spend = +Math.min(rawSpend, bot.maxTradeUSD, currentBalance-5).toFixed(2);
+          // ── POSITION SIZING WITH LEVERAGE ───────────────────────────────────
+          // Leverage mechanics:
+          // - `spend` = margin capital committed (comes out of balance)
+          // - `notionalValue` = spend × leverage = total exposure controlled
+          // - `qty` = notionalValue / price (we control MORE coins with leverage)
+          // - Stop loss triggers at price move of (sl / leverage) — much tighter
+          // - PnL = price_change_pct × leverage × margin_spent
 
-          if (spend>=10) {
-            const px=prices[best.symbol]?.price;
+          const lev = bot.leverageEnabled ? Math.max(1, bot.maxLeverage||1) : 1;
+          const conf = best.confidence || 8;
+
+          // Size the MARGIN (not notional) — leverage amplifies this
+          // Reduce position size when using leverage (more risk per dollar)
+          const leverageRiskAdj = lev > 1 ? Math.max(0.3, 1/Math.sqrt(lev)) : 1;
+          const baseK = bot.strategy==='DCA_PLUS' ? 0.10
+                      : bot.strategy==='AGGRESSIVE' ? 0.18
+                      : 0.15;
+          const confMult = Math.min(1.3, conf/8);
+          const rawMargin = baseK * confMult * leverageRiskAdj * currentBalance;
+          const margin = +Math.min(rawMargin, bot.maxTradeUSD, currentBalance - 5).toFixed(2);
+
+          if (margin >= 10) {
+            const px = prices[best.symbol]?.price;
             if (px) {
-              const fee=spend*FEE, net=spend-fee, qty=net/px;
-              const newBal=+(currentBalance-spend).toFixed(8);
-              const newPort={...currentPortfolio};
-              const existing=newPort[best.symbol];
-              if(existing){
-                const nq=existing.qty+qty;
-                newPort[best.symbol]={qty:nq,avgCost:(existing.qty*existing.avgCost+net)/nq,entryTime:existing.entryTime,leverage:1,peakPrice:px};
+              const fee = margin * FEE * lev; // fee on notional exposure
+              const notional = margin * lev;  // total exposure value
+              const qty = notional / px;      // actual coins controlled
+              const newBal = +(currentBalance - margin).toFixed(8); // only margin leaves balance
+
+              // Effective stop loss price (triggers at margin SL / leverage)
+              const slPct = (bot.stopLossPct || 0.05) / lev;
+              const stopPrice = px * (1 - slPct);
+              const tpPrice   = px * (1 + (bot.takeProfitPct || 0.08) / lev);
+
+              const newPort = { ...currentPortfolio };
+              const existing = newPort[best.symbol];
+              if (existing) {
+                const nq = existing.qty + qty;
+                const existingMargin = existing.marginSpent || (existing.qty * existing.avgCost / (existing.leverage||1));
+                newPort[best.symbol] = {
+                  qty: nq,
+                  avgCost: (existing.qty * existing.avgCost + notional) / nq, // weighted avg entry
+                  marginSpent: (existingMargin) + margin,
+                  notionalValue: (existing.notionalValue||(existing.qty*existing.avgCost)) + notional,
+                  entryTime: existing.entryTime,
+                  leverage: lev,
+                  peakPrice: px,
+                };
               } else {
-                newPort[best.symbol]={qty,avgCost:px,entryTime:new Date().toISOString(),leverage:1,peakPrice:px};
+                newPort[best.symbol] = {
+                  qty,
+                  avgCost: px,       // entry price
+                  marginSpent: margin,
+                  notionalValue: notional,
+                  entryTime: new Date().toISOString(),
+                  leverage: lev,
+                  peakPrice: px,
+                  stopPrice,
+                  takeProfitPrice: tpPrice,
+                };
               }
 
-              const t={type:'BUY',coin:best.symbol,qty,price:px,gross:spend,fee,netProceeds:net,
-                strategy:best.strategy, confidence:Math.round(best.confidence||8),
-                signals:best.signals, reasoning};
+              const t = {
+                type:'BUY', coin:best.symbol, qty, price:px,
+                gross: margin,          // margin spent
+                notional,               // total exposure
+                fee, netProceeds: margin - fee,
+                leverage: lev,
+                strategy: best.strategy,
+                confidence: Math.round(best.confidence||8),
+                signals: best.signals,
+                reasoning: lev > 1
+                  ? `${reasoning} | ${lev}x LEVERAGE: $${margin.toFixed(2)} margin controls $${notional.toFixed(2)} notional. SL at $${stopPrice.toFixed(4)} (${(slPct*100).toFixed(2)}% move).`
+                  : reasoning,
+              };
               await Trades.insert(userId, t, botId).catch(e=>ulog(botId,userId,`Trade insert: ${e.message}`,'ERROR'));
               setCooldown(botId, best.symbol, cycleNum);
               setMem(botId, { balance:newBal, portfolio:newPort, peakValue, totalFees:(botMem.get(botId)?.totalFees||0)+fee });
-              ulog(botId, userId, `✅ BUY ${qty.toFixed(5)} ${best.symbol} @ $${px.toFixed(4)} | $${spend.toFixed(2)} | conf:${best.confidence?.toFixed(1)}/10`, 'TRADE');
+
+              if (lev > 1) {
+                ulog(botId, userId, `✅ BUY ${qty.toFixed(5)} ${best.symbol} @ $${px.toFixed(4)} | Margin: $${margin.toFixed(2)} | Notional: $${notional.toFixed(2)} | ${lev}x LEV | SL: $${stopPrice.toFixed(4)}`, 'TRADE');
+              } else {
+                ulog(botId, userId, `✅ BUY ${qty.toFixed(5)} ${best.symbol} @ $${px.toFixed(4)} | $${margin.toFixed(2)} | conf:${best.confidence?.toFixed(1)}/10`, 'TRADE');
+              }
             }
           } else {
-            ulog(botId, userId, `Spend too small ($${spend.toFixed(2)}) — need $10 min`, 'HOLD');
+            ulog(botId, userId, `Margin too small ($${margin.toFixed(2)}) — need $10 min`, 'HOLD');
           }
         }
       } else {
