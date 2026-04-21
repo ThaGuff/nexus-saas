@@ -18,6 +18,7 @@ import customRoutes   from './routes/customStrategy.js';
 import { setupWebSocket } from './routes/ws.js';
 import referralRoutes from './routes/referrals.js';
 import { restoreActiveBots } from './services/botManager.js';
+import { sendAbandonEmail } from './services/email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT      = process.env.PORT || 3000;
@@ -47,6 +48,16 @@ app.use('/api/ai',        aiRoutes);
 app.use('/api/manual',    manualRoutes);
 app.use('/api/custom',    customRoutes);
 app.use('/api/referrals', referralRoutes);
+
+// Abandon register capture — frontend calls this when email is typed but user leaves
+app.post('/api/capture-email', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.includes('@')) return res.json({ ok: false });
+  // Send after 30 min delay (user gave up but might reconsider)
+  setTimeout(() => sendAbandonEmail(email).catch(()=>{}), 30 * 60 * 1000);
+  console.log(`[Email] Abandon capture: ${email}`);
+  res.json({ ok: true });
+});
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString(), version: '6.0.0' }));
 
@@ -79,6 +90,14 @@ app.get('*', (_, res) => {
   const idx = path.join(distPath, 'index.html');
   if (fs.existsSync(idx)) res.sendFile(idx);
   else res.json({ status: 'Frontend not built' });
+});
+
+// Unsubscribe from drip emails
+app.get('/unsubscribe', (req, res) => {
+  const { email } = req.query;
+  console.log('[Email] Unsubscribe:', email);
+  const html = '<html><body style="font-family:sans-serif;padding:40px;text-align:center;background:#04060e;color:#94a3b8"><h2 style="color:#00e5a0">Unsubscribed</h2><p>You have been removed from PLEX Trader emails.</p><a href="/" style="color:#00e5a0">Return to PLEX Trader</a></body></html>';
+  res.send(html);
 });
 
 setupWebSocket(http);

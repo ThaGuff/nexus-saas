@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuid } from 'uuid';
 import { Users } from '../models/db.js';
+import { sendWelcome, scheduleUserDrip } from '../services/email.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -53,6 +54,19 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await Users.create({ id: uuid(), email, passwordHash, firstName, lastName });
     const token = makeToken(user.id);
+
+    // Fire welcome email and schedule drip sequence (non-blocking)
+    sendWelcome(user).catch(()=>{});
+    scheduleUserDrip(user).catch(()=>{});
+
+    // Track referral if code provided
+    if (req.body.referralCode) {
+      try {
+        const { referralCodes, referredUsers } = await import('./referrals.js');
+        const referrerId = referralCodes.get(req.body.referralCode);
+        if (referrerId && referrerId !== user.id) referredUsers.set(user.id, referrerId);
+      } catch {}
+    }
 
     res.status(201).json({ token, user: Users.safePublic(user) });
   } catch (e) {

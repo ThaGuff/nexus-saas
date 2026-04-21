@@ -11,6 +11,17 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [emailCaptured, setEmailCaptured] = useState(false);
+
+  // Capture email if user leaves without completing registration
+  function captureEmail(email) {
+    if (!email || !email.includes('@') || emailCaptured) return;
+    setEmailCaptured(true);
+    fetch('/api/capture-email', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email })
+    }).catch(()=>{});
+  }
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -22,7 +33,9 @@ export default function Register() {
     if (!agreed) return setError('You must accept the risk disclosure to continue');
     setLoading(true);
     try {
-      await register(form.email, form.password, form.firstName, form.lastName);
+      // Pass referral code from URL if present
+      const refCode = new URLSearchParams(window.location.search).get('ref');
+      await register(form.email, form.password, form.firstName, form.lastName, refCode);
       nav('/dashboard');
     } catch (e) {
       setError(e.message);
@@ -50,7 +63,7 @@ export default function Register() {
               </div>
             ))}
           </div>
-          {[['email','Email Address','email'],['password','Password','password'],['confirm','Confirm Password','password']].map(([k,l,t]) => (
+          {[['email','Email Address','email',true],['password','Password','password'],['confirm','Confirm Password','password']].map(([k,l,t]) => (
             <div key={k} style={{ marginBottom:12 }}>
               <label style={{ color:C.sub, fontSize:11, letterSpacing:'0.1em', display:'block', marginBottom:6 }}>{l.toUpperCase()}</label>
               <input type={t} value={form[k]} onChange={set(k)} placeholder={l} required style={inp} />

@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login    = async (e,p)     => { const {token,user}=await api.login({email:e,password:p}); setToken(token); setUser(user); return user; };
-  const register = async (e,p,f,l) => { const {token,user}=await api.register({email:e,password:p,firstName:f,lastName:l}); setToken(token); setUser(user); return user; };
+  const register = async (e,p,f,l,ref) => { const {token,user}=await api.register({email:e,password:p,firstName:f,lastName:l,referralCode:ref||null}); setToken(token); setUser(user); return user; };
   const logout   = ()              => { clearToken(); setUser(null); };
   const refreshUser = async ()     => { try{const{user}=await api.me();setUser(user);return user;}catch{} };
 

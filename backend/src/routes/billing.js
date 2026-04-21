@@ -4,20 +4,23 @@
 
 import express from 'express';
 import Stripe from 'stripe';
-import { Users } from '../models/db.js';
+import { Users, Trades } from '../models/db.js';
+import { sendCancelWinBack, sendSubscriptionStarted } from '../services/email.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router  = express.Router();
 const stripe  = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const FRONTEND = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-const BASIC_PRICE_ID   = process.env.STRIPE_BASIC_PRICE_ID   || process.env.STRIPE_PRICE_ID || '';
-const PREMIUM_PRICE_ID = process.env.STRIPE_PREMIUM_PRICE_ID || '';
+const BASIC_PRICE_ID      = process.env.STRIPE_BASIC_PRICE_ID   || process.env.STRIPE_PRICE_ID || '';
+const PREMIUM_PRICE_ID    = process.env.STRIPE_PREMIUM_PRICE_ID || '';
+const ENTERPRISE_PRICE_ID = process.env.STRIPE_ENTERPRISE_PRICE_ID || '';
 
 function getPlanFromPriceId(priceId) {
   if (!priceId) return 'basic';
-  if (PREMIUM_PRICE_ID && priceId === PREMIUM_PRICE_ID) return 'premium';
-  if (BASIC_PRICE_ID   && priceId === BASIC_PRICE_ID)   return 'basic';
+  if (ENTERPRISE_PRICE_ID && priceId === ENTERPRISE_PRICE_ID) return 'enterprise';
+  if (PREMIUM_PRICE_ID    && priceId === PREMIUM_PRICE_ID)    return 'premium';
+  if (BASIC_PRICE_ID      && priceId === BASIC_PRICE_ID)      return 'basic';
   return 'basic';
 }
 
@@ -25,7 +28,7 @@ function getPlanFromPriceId(priceId) {
 router.post('/checkout', requireAuth, async (req, res) => {
   try {
     const { plan } = req.body;
-    const priceId = plan === 'premium' ? PREMIUM_PRICE_ID : BASIC_PRICE_ID;
+    const priceId = plan === 'enterprise' ? ENTERPRISE_PRICE_ID : plan === 'premium' ? PREMIUM_PRICE_ID : BASIC_PRICE_ID;
 
     if (!priceId) {
       return res.status(500).json({ error: 'Stripe price ID not configured. Set STRIPE_BASIC_PRICE_ID and STRIPE_PREMIUM_PRICE_ID in Railway env vars.' });
@@ -115,6 +118,14 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
             subscriptionStatus: sub.status,
             plan: sub.status === 'active' ? planName : 'trial',
           });
+          // Send subscription confirmation email
+          if (sub.status === 'active' && event.type === 'customer.subscription.created') {
+            const user = await Users.findById(userId).catch(()=>null);
+            if (user) {
+              const planLabel = planName.charAt(0).toUpperCase() + planName.slice(1);
+              sendSubscriptionStarted(user, planLabel).catch(()=>{});
+            }
+          }
         }
         break;
       }
@@ -125,6 +136,15 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         const userId   = customer.metadata?.userId;
         if (userId) {
           await Users.update(userId, { subscriptionStatus: 'canceled', plan: 'trial' });
+          // Send win-back email with their stats
+          const user = await Users.findById(userId).catch(()=>null);
+          if (user) {
+            const trades = await Trades.forUser(userId, 500).catch(()=>[]);
+            const sells  = trades.filter(t=>t.type==='SELL');
+            const wins   = sells.filter(t=>t.pnl>0).length;
+            const winRate = sells.length ? Math.round(wins/sells.length*100) : 0;
+            sendCancelWinBack(user, { tradesCount:trades.length, winRate }).catch(()=>{});
+          }
         }
         break;
       }
