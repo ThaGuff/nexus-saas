@@ -327,7 +327,7 @@ async function runBotCycle(botId, userId) {
           if (result.score > 0) {
             ulog(botId, userId, `  ${symbol}: score=${result.score.toFixed(1)} min=${result.minScore} conf=${result.confidence?.toFixed(1)||'—'}/10 sigs=${result.signals?.slice(0,2).join(',')||'—'}`, 'INFO');
           }
-          if (result.score >= result.minScore && result.confidence >= 8) {
+          if (result.score >= result.minScore) { // confidence auto-satisfied when score >= minScore
             scored.push({ symbol, ...result });
           }
         } catch(e) {

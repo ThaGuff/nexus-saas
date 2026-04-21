@@ -49,10 +49,11 @@ export const COINS = [
 const PAIR_MAP = Object.fromEntries(COINS.map(c=>[c.id,c.symbol]));
 
 // Per-botKey isolated stores
-const priceHist = new Map();
-const volHist   = new Map();
-const rsiHist   = new Map();
-const cooldowns = new Map();
+const priceHist   = new Map();
+const volHist     = new Map();
+const rsiHist     = new Map();
+const cooldowns   = new Map();
+const prevVol24h  = new Map(); // track previous 24h volume to compute delta
 
 function getArr(store, key, sym) {
   if (!store.has(key)) store.set(key, {});
@@ -127,7 +128,15 @@ export async function fetchPrices(botKey) {
           openPrice:   parseFloat(t.openPrice)||price,
         };
         const ph=getPH(botKey,sym); ph.push(price); if(ph.length>150) ph.shift();
-        const vh=getVH(botKey,sym); vh.push(parseFloat(t.quoteVolume)||0); if(vh.length>150) vh.shift();
+        // Store volume DELTA (change since last cycle) not rolling 24h total
+        // This gives us actual recent trading activity vs the average
+        const rawVol24h = parseFloat(t.quoteVolume)||0;
+        if(!prevVol24h.has(botKey)) prevVol24h.set(botKey,{});
+        const prev = prevVol24h.get(botKey);
+        const volDelta = prev[sym]!=null ? Math.max(0, rawVol24h - prev[sym]) : rawVol24h/1440; // ~1 min equivalent
+        prev[sym] = rawVol24h;
+        const vh=getVH(botKey,sym);
+        vh.push(volDelta); if(vh.length>150) vh.shift();
       }
     } catch(e){console.error('[Algo] fetch error:',e.message);}
   }
@@ -525,14 +534,16 @@ const STRATEGIES = {
       const sigs=[]; let score=0;
       const chg=prices[sym]?.change24h||0;
 
-      // GATE 1: Must have strong catalyst
-      const extremeVol     = ind.volumeRatio>2.5;
-      const extremeDip     = chg<-7&&ind.rsiUp&&ind.rsi<35;
-      const momentumBurst  = chg>5&&ind.volumeRatio>2.0&&ind.rsiUp;
-      const panicBottom    = ind.rsi!==null&&ind.rsi<22&&ind.volumeRatio>2&&ind.rsiUp;
+      // GATE 1: Must have a meaningful catalyst (volume spike OR price move)
+      const extremeVol     = ind.volumeRatio>2.0;            // 2x volume (was 2.5x)
+      const elevatedVol    = ind.volumeRatio>1.5;            // 1.5x volume — wider net
+      const extremeDip     = chg<-5&&ind.rsiUp&&ind.rsi<40; // dip>5% recovering (was -7, rsi<35)
+      const momentumBurst  = chg>4&&ind.rsiUp;               // pump>4% with RSI rising (removed vol req)
+      const panicBottom    = ind.rsi!==null&&ind.rsi<25&&ind.rsiUp; // panic RSI, no vol req
+      const bigMove        = Math.abs(chg)>3&&elevatedVol;   // any 3%+ move with modest volume
 
-      if(!extremeVol&&!extremeDip&&!momentumBurst&&!panicBottom){
-        return{score:-1,sigs:['GATE:NO_STRONG_CATALYST'],strategy:'AGGRESSIVE'};
+      if(!extremeVol&&!extremeDip&&!momentumBurst&&!panicBottom&&!bigMove){
+        return{score:-1,sigs:['GATE:NO_CATALYST'],strategy:'AGGRESSIVE'};
       }
 
       // GATE 2: RSI direction must match trade direction
@@ -544,11 +555,13 @@ const STRATEGIES = {
       else if(ind.volumeRatio>3){score+=4;sigs.push(`VOL_SPIKE(${ind.volumeRatio.toFixed(1)}x)✓`);}
       else if(ind.volumeRatio>2){score+=2;}
 
-      // Price catalyst
-      if(chg<-9&&ind.rsiUp){score+=6;sigs.push(`EXTREME_DIP(${chg.toFixed(1)}%)↑`);}
-      else if(chg<-6&&ind.rsiUp){score+=4;sigs.push(`SHARP_DIP(${chg.toFixed(1)}%)↑`);}
-      else if(chg>10&&ind.volumeRatio>2.5){score+=5;sigs.push(`PUMP(+${chg.toFixed(1)}%)`);}
-      else if(chg>6){score+=3;sigs.push(`STRONG_MOVE(+${chg.toFixed(1)}%)`);}
+      // Price catalyst scoring (more granular)
+      if(chg<-9&&ind.rsiUp){score+=7;sigs.push(`EXTREME_DIP(${chg.toFixed(1)}%)↑`);}
+      else if(chg<-6&&ind.rsiUp){score+=5;sigs.push(`SHARP_DIP(${chg.toFixed(1)}%)↑`);}
+      else if(chg<-4&&ind.rsiUp){score+=3;sigs.push(`DIP(${chg.toFixed(1)}%)↑`);}
+      else if(chg>10&&ind.volumeRatio>2){score+=6;sigs.push(`PUMP(+${chg.toFixed(1)}%)`);}
+      else if(chg>7){score+=4;sigs.push(`STRONG_MOVE(+${chg.toFixed(1)}%)`);}
+      else if(chg>4){score+=2;sigs.push(`MOVE(+${chg.toFixed(1)}%)`);}
 
       // RSI scoring
       if(ind.rsi!==null){
@@ -570,7 +583,7 @@ const STRATEGIES = {
    * Key change: Only Tier 1 coins, stricter dip requirement, RSI must be rising
    */
   DCA_PLUS: {
-    name:'DCA+', minScore:9,
+    name:'DCA+', minScore:7,
     description:'Tier-1 blue chips only (BTC/ETH/SOL/XRP/BNB). Meaningful dip + RSI rising.',
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
@@ -581,13 +594,13 @@ const STRATEGIES = {
       if(!coin||coin.tier>1) return{score:-1,sigs:['GATE:NOT_TIER1'],strategy:'DCA_PLUS'};
 
       // GATE 2: Must have a real dip (at least -1%)
-      if(chg>=-1) return{score:-1,sigs:['GATE:INSUFFICIENT_DIP'],strategy:'DCA_PLUS'};
+      if(chg>2) return{score:-1,sigs:['GATE:COIN_PUMPING'],strategy:'DCA_PLUS'}; // only block if pumping hard
 
       // GATE 3: RSI below 50
       if(ind.rsi!==null&&ind.rsi>50) return{score:-1,sigs:['GATE:RSI_TOO_HIGH'],strategy:'DCA_PLUS'};
 
       // GATE 4: RSI rising preferred; only block if falling hard from overbought
-      if(ind.rsiDn&&ind.rsi!==null&&ind.rsi>45) return{score:-1,sigs:['GATE:RSI_FALLING_FROM_HIGH'],strategy:'DCA_PLUS'};
+      if(ind.rsiDn&&ind.rsi!==null&&ind.rsi>55) return{score:-1,sigs:['GATE:RSI_FALLING_FROM_HIGH'],strategy:'DCA_PLUS'};
 
       // Bear trend = small penalty
       if(ind.isBearTrend&&ind.rsi>35){score-=2;sigs.push('BEAR_TREND⚠');}
@@ -595,11 +608,13 @@ const STRATEGIES = {
       // Tier bonus (all tier 1 now)
       score+=4;sigs.push('TIER1_BLUECHIP✓');
 
-      // Dip depth scoring
+      // Dip depth scoring — reward dips, allow flat
       if(chg<-8){score+=6;sigs.push(`DIP_MAJOR(${chg.toFixed(1)}%)`);}
       else if(chg<-5){score+=5;sigs.push(`DIP_STRONG(${chg.toFixed(1)}%)`);}
       else if(chg<-3){score+=3;sigs.push(`DIP(${chg.toFixed(1)}%)`);}
-      else{score+=1;sigs.push(`MILD_DIP(${chg.toFixed(1)}%)`);}
+      else if(chg<-1){score+=2;sigs.push(`MILD_DIP(${chg.toFixed(1)}%)`);}
+      else if(chg<=2){score+=1;sigs.push('FLAT_ACCUMULATE');}
+      else{score+=0;} // chg>2 already blocked above
 
       // RSI position
       if(ind.rsi!==null){
