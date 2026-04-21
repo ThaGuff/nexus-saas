@@ -426,7 +426,7 @@ const SettingsModal=memo(({user,plans=[],onClose})=>{
     <Modal title="Settings" onClose={onClose} width={640}>
       {/* Sidebar tabs */}
       <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.b}`,marginBottom:20,marginTop:-6,overflowX:'auto'}}>
-        {['account','subscription','privacy','preferences'].map(t=>(
+        {['account','subscription','referral','privacy','preferences'].map(t=>(
           <button key={t}onClick={()=>setTab(t)}style={{background:'transparent',border:'none',padding:'9px 16px',color:tab===t?C.amber:C.tx3,fontSize:11,fontWeight:700,cursor:'pointer',borderBottom:tab===t?`2px solid ${C.amber}`:'2px solid transparent',textTransform:'capitalize',letterSpacing:'0.04em',transition:'color 0.15s',whiteSpace:'nowrap'}}>{t}</button>
         ))}
       </div>
@@ -487,6 +487,39 @@ const SettingsModal=memo(({user,plans=[],onClose})=>{
         </div>}
       </div>}
 
+      {tab==='referral'&&<div style={{display:'flex',flexDirection:'column',gap:16}}>
+        <div style={{padding:16,background:`${C.green}08`,border:`1px solid ${C.green}20`,borderRadius:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.green,marginBottom:8}}>💰 Earn $10 Per Referral</div>
+          <div style={{fontSize:12,color:C.tx3,lineHeight:1.6}}>Share your link. When a friend subscribes, you earn $10 credit applied to your next bill.</div>
+        </div>
+        {referralData&&(<>
+          <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:10,padding:14}}>
+            <div style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:8}}>Your Referral Link</div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{flex:1,background:'rgba(0,0,0,0.3)',border:`1px solid ${C.b2}`,borderRadius:7,padding:'8px 11px',fontFamily:"'DM Mono',monospace",fontSize:11,color:C.tx,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{referralData.link}</div>
+              <button onClick={()=>{navigator.clipboard.writeText(referralData.link);}} style={{padding:'8px 14px',borderRadius:7,background:`${C.green}15`,border:`1px solid ${C.green}30`,color:C.green,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>Copy</button>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+            {[['Referred',referralData.referred,C.cyan],['Pending','$'+(referralData.pending*10),C.amber],['Earned','$'+referralData.earnings,C.green]].map(([l,v,col])=>(
+              <div key={l} style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:10,padding:'12px',textAlign:'center'}}>
+                <div style={{fontSize:20,fontWeight:800,color:col,fontFamily:"'DM Mono',monospace"}}>{v}</div>
+                <div style={{fontSize:9,color:C.tx3,marginTop:4,textTransform:'uppercase',letterSpacing:'0.1em'}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{background:C.card,border:`1px solid ${C.b}`,borderRadius:10,padding:14}}>
+            <div style={{fontSize:9,color:C.tx3,fontFamily:"'DM Mono',monospace",letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:10}}>How It Works</div>
+            {(referralData.howItWorks||[]).map((s,i)=>(
+              <div key={i} style={{display:'flex',gap:10,marginBottom:8,alignItems:'flex-start'}}>
+                <span style={{width:18,height:18,borderRadius:'50%',background:`${C.green}20`,color:C.green,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</span>
+                <span style={{fontSize:12,color:C.tx3,lineHeight:1.5}}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </>)}
+      </div>}
+
       {tab==='privacy'&&<div style={{color:C.tx2,fontSize:13,lineHeight:1.8}}>
         {[['Data Collection','PLEX Trader collects your email, trading activity, and bot configuration to provide the service. We never sell your personal information.'],['API Key Security','Exchange API keys are encrypted with AES-256-CBC and never leave our servers. They are used solely to execute trades on your behalf.'],['Trading Data','Your trading history and performance data are stored securely and used only to provide analytics within your account.'],['Your Rights','Request deletion of your account and all data at any time: privacy@plexautomation.io. Processed within 30 days.']].map(([t,d])=>(
           <div key={t}style={{marginBottom:16,paddingBottom:16,borderBottom:`1px solid ${C.b}`}}>
@@ -541,6 +574,7 @@ export default function Dashboard(){
   const[drawer,setDrawer]=useState(null);
 
   // Manual trading state
+  const[referralData,setReferralData]=useState(null);
   const[manualSym,setManualSym]=useState('BTC');
   const[manualType,setManualType]=useState('BUY');
   const[manualAmt,setManualAmt]=useState('100');
@@ -562,6 +596,8 @@ export default function Dashboard(){
 
     // Initial loads
     api.exchanges().then(d=>setExchanges(d.exchanges||[])).catch(()=>{});
+    fetch('/api/referrals/me',{headers:{Authorization:`Bearer ${localStorage.getItem('nexus_token')}`}})
+      .then(r=>r.json()).then(setReferralData).catch(()=>{});
     api.plans().then(d=>setPlans(d.plans||[])).catch(()=>{});
     api.news().then(d=>setNews(d.articles||[])).catch(()=>{});
     api.fearGreed().then(setFearGreed).catch(()=>{});
@@ -1277,6 +1313,17 @@ export default function Dashboard(){
                 </div>
               ))}
             </div>}
+          </div>
+        )}
+
+        {/* ━━━ PLEX AUTOMATION CROSS-SELL (bottom of page) ━━━ */}
+        {tab==='exchanges'&&(
+          <div style={{marginTop:8,background:`${C.amber}06`,border:`1px solid ${C.amber}20`,borderRadius:12,padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:13,color:C.amber,marginBottom:3}}>⚡ Running a Local Business?</div>
+              <div style={{fontSize:12,color:C.tx3,lineHeight:1.5}}>PLEX Trader is powered by PLEX Automation — AI workflows for HVAC, insurance, real estate & more.</div>
+            </div>
+            <a href="https://plexautomation.io" target="_blank" rel="noreferrer" style={{padding:'9px 18px',background:`${C.amber}15`,border:`1px solid ${C.amber}35`,borderRadius:8,color:C.amber,fontWeight:700,fontSize:12,textDecoration:'none',flexShrink:0}}>plexautomation.io →</a>
           </div>
         )}
 

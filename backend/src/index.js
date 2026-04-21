@@ -16,6 +16,7 @@ import aiRoutes       from './routes/ai.js';
 import manualRoutes   from './routes/manual.js';
 import customRoutes   from './routes/customStrategy.js';
 import { setupWebSocket } from './routes/ws.js';
+import referralRoutes from './routes/referrals.js';
 import { restoreActiveBots } from './services/botManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +46,7 @@ app.use('/api/market',    marketRoutes);
 app.use('/api/ai',        aiRoutes);
 app.use('/api/manual',    manualRoutes);
 app.use('/api/custom',    customRoutes);
+app.use('/api/referrals', referralRoutes);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString(), version: '6.0.0' }));
 
@@ -59,7 +61,13 @@ app.get('/api/plans', (_, res) => res.json({
     {
       id: 'premium', name: 'Premium', price: 69.99, stripePriceId: process.env.STRIPE_PREMIUM_PRICE_ID,
       bots: 3, popular: true,
-      features: ['3 trading bots', 'All 7 strategies', 'Custom strategy builder', 'Manual trading', 'AI trading assistant', 'Priority support', 'NXTR rewards', 'Advanced analytics'],
+      features: ['3 trading bots', 'All 7 strategies', 'Custom strategy builder', 'Manual trading', 'AI trading assistant', 'Priority support', 'Advanced analytics'],
+      strategies: ['PRECISION', 'DCA_PLUS', 'MOMENTUM', 'SWING', 'REVERSAL', 'BREAKOUT', 'AGGRESSIVE'],
+    },
+    {
+      id: 'enterprise', name: 'Enterprise', price: 149.99, stripePriceId: process.env.STRIPE_ENTERPRISE_PRICE_ID,
+      bots: 5, popular: false,
+      features: ['5 trading bots', 'All 7 strategies', 'Dedicated Gemini API key', 'Strategy marketplace access', 'Webhook API access', 'Custom onboarding call', 'White-glove support', 'Priority bug fixes'],
       strategies: ['PRECISION', 'DCA_PLUS', 'MOMENTUM', 'SWING', 'REVERSAL', 'BREAKOUT', 'AGGRESSIVE'],
     },
   ],

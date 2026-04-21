@@ -156,22 +156,63 @@ export default function Landing() {
         </div>
       </section>
 
+
+      {/* Exchange Partners — Affiliate Section */}
+      <section style={{ padding: '0 6% 80px', maxWidth: 900, margin: '0 auto', textAlign: 'center' }}>
+        <h2 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 900, letterSpacing: '-0.02em', marginBottom: 8 }}>Get Started on a Supported Exchange</h2>
+        <p style={{ color: C.muted, marginBottom: 40, fontSize: 14 }}>PLEX Trader connects directly to these exchanges. Sign up through our links to support the platform.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile?1:4},1fr)`, gap: 12 }}>
+          {[
+            { name:'Coinbase', url:'https://www.coinbase.com/join/plex_trader', fee:'0.10% taker', color:'#0052ff', note:'Best for beginners. FDIC-insured USD.' },
+            { name:'Binance', url:'https://accounts.binance.com/register?ref=PLEXAUTO', fee:'0.10% taker', color:'#f0b90b', note:'Highest liquidity. Most trading pairs.' },
+            { name:'Kraken', url:'https://www.kraken.com/sign-up?referral=PLEXTRADER', fee:'0.16% taker', color:'#5741d9', note:'Most secure. Best for high-volume.' },
+            { name:'Crypto.com', url:'https://crypto.com/app/plexauto', fee:'0.075% taker', color:'#002d74', note:'Lowest fees. CRO staking discounts.' },
+          ].map(ex => (
+            <a key={ex.name} href={ex.url} target="_blank" rel="noreferrer" style={{ display:'block', textDecoration:'none', background:'#0a0f1e', border:`1px solid ${ex.color}30`, borderRadius:12, padding:20, transition:'all 0.2s' }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=`${ex.color}80`;e.currentTarget.style.transform='translateY(-2px)';}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=`${ex.color}30`;e.currentTarget.style.transform='';}}>
+              <div style={{ fontSize:16, fontWeight:800, color:ex.color, marginBottom:6 }}>{ex.name}</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:8, lineHeight:1.5 }}>{ex.note}</div>
+              <div style={{ fontSize:10, color:'#475569', fontFamily:'JetBrains Mono' }}>Fee: {ex.fee}</div>
+              <div style={{ marginTop:12, padding:'6px 12px', background:`${ex.color}18`, border:`1px solid ${ex.color}30`, borderRadius:6, fontSize:11, fontWeight:700, color:ex.color }}>Open Account →</div>
+            </a>
+          ))}
+        </div>
+        <p style={{ color:'#334155', fontSize:11, marginTop:16 }}>* Affiliate links help support PLEX Trader development at no cost to you.</p>
+      </section>
+
       {/* Pricing */}
-      <section style={{ padding: '0 6% 80px', maxWidth: 460, margin: '0 auto', textAlign: 'center' }}>
-        <h2 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, letterSpacing: '-0.02em', marginBottom: 8 }}>One Plan. Everything.</h2>
-        <p style={{ color: C.muted, marginBottom: 40, fontSize: 15 }}>No hidden fees. No tiers. Cancel anytime.</p>
-        <div style={{ background: '#0a0f1e', border: '1px solid #00e5a025', borderRadius: 16, padding: isMobile ? 28 : 40, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: C.green, color: '#000', padding: '4px 16px', borderRadius: 100, fontSize: 11, fontWeight: 800 }}>14 DAYS FREE</div>
-          <div style={{ fontSize: 56, fontWeight: 900, color: C.text, fontFamily: 'JetBrains Mono', marginBottom: 4 }}>$29<span style={{ fontSize: 22, color: C.muted }}>.99</span></div>
-          <div style={{ color: C.muted, marginBottom: 28, fontSize: 14 }}>per month after trial</div>
-          {['Unlimited paper + live trading', 'AI-powered decisions (Gemini Flash)', 'RSI + MACD + BB multi-signal', 'Real-time dashboard', 'Coinbase & Binance integration', 'Full trade reasoning log', 'Cancel anytime'].map(f => (
-            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, textAlign: 'left' }}>
-              <span style={{ color: C.green, fontWeight: 700 }}>✓</span>
-              <span style={{ color: C.muted, fontSize: 14 }}>{f}</span>
+      <section style={{ padding: '0 6% 80px', maxWidth: 860, margin: '0 auto', textAlign: 'center' }}>
+        <h2 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, letterSpacing: '-0.02em', marginBottom: 8 }}>Simple Pricing. No Surprises.</h2>
+        <p style={{ color: C.muted, marginBottom: 40, fontSize: 15 }}>14-day free trial on all plans. Cancel anytime.</p>
+        <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr', gap:16 }}>
+          {[
+            { name:'Basic', price:'29.99', color:C.green, badge:null, bots:1,
+              features:['1 trading bot','PRECISION + DCA+ strategies','Paper & live trading','Coinbase + Binance','Real-time dashboard','Email support'] },
+            { name:'Premium', price:'69.99', color:'#a855f7', badge:'MOST POPULAR', bots:3,
+              features:['3 trading bots','All 7 strategies','ARIA AI assistant','Custom strategy builder','Manual trading','Analytics + learning engine','Priority support'] },
+            { name:'Enterprise', price:'149.99', color:C.amber, badge:'BEST VALUE', bots:5,
+              features:['5 trading bots','All 7 strategies','Dedicated Gemini key','Strategy marketplace access','API access (webhooks)','Custom onboarding call','White-glove support'] },
+          ].map(plan => (
+            <div key={plan.name} style={{ background:'#0a0f1e', border:`1px solid ${plan.color}30`, borderRadius:16, padding:isMobile?24:32, position:'relative', display:'flex', flexDirection:'column' }}>
+              {plan.badge&&<div style={{ position:'absolute', top:-13, left:'50%', transform:'translateX(-50%)', background:plan.color, color:'#000', padding:'4px 16px', borderRadius:100, fontSize:10, fontWeight:800, whiteSpace:'nowrap' }}>{plan.badge}</div>}
+              <div style={{ fontSize:13, fontWeight:700, color:plan.color, marginBottom:12, letterSpacing:'0.05em' }}>{plan.name.toUpperCase()}</div>
+              <div style={{ fontSize:48, fontWeight:900, color:'#f1f5f9', fontFamily:'JetBrains Mono', marginBottom:2 }}>${plan.price.split('.')[0]}<span style={{ fontSize:18, color:C.muted }}>.{plan.price.split('.')[1]}</span></div>
+              <div style={{ color:C.muted, marginBottom:24, fontSize:13 }}>per month · {plan.bots} bot{plan.bots>1?'s':''}</div>
+              <div style={{ flex:1, marginBottom:24 }}>
+                {plan.features.map(f=>(
+                  <div key={f} style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:10, textAlign:'left' }}>
+                    <span style={{ color:plan.color, fontWeight:700, flexShrink:0 }}>✓</span>
+                    <span style={{ color:C.muted, fontSize:13, lineHeight:1.4 }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ position:'absolute', top:-13, right:16, background:'#0a0f1e', border:`1px solid ${plan.color}30`, borderRadius:20, padding:'3px 10px', fontSize:10, color:plan.color }}>14 days free</div>
+              <Link to="/register" style={{ display:'block', background:`linear-gradient(135deg,${plan.color},${plan.color}bb)`, color:'#000', textDecoration:'none', padding:'13px', borderRadius:10, fontSize:14, fontWeight:800 }}>Start Free Trial →</Link>
             </div>
           ))}
-          <Link to="/register" className="btn-primary" style={{ display: 'block', background: C.green, color: '#000', textDecoration: 'none', padding: '15px', borderRadius: 10, fontSize: 15, fontWeight: 800, marginTop: 28 }}>Start Free Trial →</Link>
         </div>
+        <p style={{ color:'#334155', fontSize:12, marginTop:20 }}>All plans include 14-day free trial. No credit card required to start.</p>
       </section>
 
       {/* Legal */}
@@ -179,6 +220,20 @@ export default function Landing() {
         <h3 style={{ color: C.red, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Risk Disclosure & Legal Notice</h3>
         <p style={{ color: '#475569', fontSize: 12, lineHeight: 1.9, marginBottom: 12 }}>Cryptocurrency trading carries an extremely high risk of financial loss. PLEX Trader is automated software — <strong style={{ color: '#64748b' }}>not a licensed financial adviser, broker, or investment manager</strong>. All trades are executed by algorithms with no human oversight.</p>
         <p style={{ color: '#475569', fontSize: 12, lineHeight: 1.9 }}>By using PLEX Trader you confirm you've read our <Link to="/terms" style={{ color: C.blue }}>Terms of Service</Link> and <Link to="/privacy" style={{ color: C.blue }}>Privacy Policy</Link> and accept all financial risk.</p>
+      </section>
+
+      {/* PLEX Automation Cross-sell */}
+      <section style={{ borderTop:'1px solid #ffffff08', padding:'48px 6%', maxWidth:800, margin:'0 auto', textAlign:'center' }}>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#f59e0b12', border:'1px solid #f59e0b25', borderRadius:100, padding:'6px 14px', marginBottom:20 }}>
+          <span style={{ color:C.amber, fontSize:11, fontWeight:700 }}>POWERED BY PLEX AUTOMATION</span>
+        </div>
+        <h3 style={{ fontSize:isMobile?22:28, fontWeight:900, marginBottom:12, letterSpacing:'-0.02em' }}>Running a Local Business?</h3>
+        <p style={{ color:C.muted, fontSize:15, lineHeight:1.7, marginBottom:24, maxWidth:560, margin:'0 auto 24px' }}>
+          PLEX Trader is built by PLEX Automation — the AI automation agency that helps HVAC companies, insurance agents, and real estate teams run on autopilot using GoHighLevel, Make.com, and custom AI workflows.
+        </p>
+        <a href="https://plexautomation.io" target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#f59e0b', color:'#000', textDecoration:'none', padding:'12px 24px', borderRadius:10, fontSize:14, fontWeight:800 }}>
+          Automate Your Business → plexautomation.io
+        </a>
       </section>
 
       <footer style={{ borderTop: '1px solid #ffffff08', padding: '24px 6%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
