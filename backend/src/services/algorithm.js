@@ -181,11 +181,15 @@ function mom(arr,n){if(arr.length<n+1)return null;return((arr[arr.length-1]-arr[
 function volRatio(vols,n=14){if(vols.length<n+1)return 1;const r=vols[vols.length-1],avg=vols.slice(-n-1,-1).reduce((a,b)=>a+b)/n;return avg>0?r/avg:1;}
 
 // RSI trend: returns +1 rising, -1 falling, 0 flat
+// Rising = last reading higher than previous (just 2 points needed)
+// Falling = last TWO readings both declining (stricter — avoid false falling signals)
 function rsiTrend(k,sym){
   const h=getRH(k,sym);
-  if(h.length<3)return 0;
-  const rising=h[h.length-1]>h[h.length-2]&&h[h.length-2]>h[h.length-3];
-  const falling=h[h.length-1]<h[h.length-2]&&h[h.length-2]<h[h.length-3];
+  if(h.length<2)return 0;
+  const rising  = h[h.length-1]>h[h.length-2];
+  const falling = h.length>=3
+    ? h[h.length-1]<h[h.length-2]&&h[h.length-2]<h[h.length-3]
+    : h[h.length-1]<h[h.length-2];
   return rising?1:falling?-1:0;
 }
 
@@ -236,8 +240,8 @@ const STRATEGIES = {
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
 
-      // GATE 1: RSI below 52 — oversold/neutral range
-      if(ind.rsi===null||ind.rsi>52) return{score:-1,sigs:['GATE:RSI_TOO_HIGH'],strategy:'PRECISION'};
+      // GATE 1: RSI below 55 — allows more coins to qualify
+      if(ind.rsi===null||ind.rsi>55) return{score:-1,sigs:['GATE:RSI_TOO_HIGH'],strategy:'PRECISION'};
 
       // GATE 2: RSI MUST be rising — never buy a falling knife
       if(!ind.rsiUp) return{score:-1,sigs:['GATE:RSI_FALLING'],strategy:'PRECISION'};
@@ -295,13 +299,13 @@ const STRATEGIES = {
     scoreEntry(ind,prices,sym){
       const sigs=[]; let score=0;
 
-      // GATE 1: RSI in clean momentum zone
-      if(ind.rsi===null||ind.rsi<42||ind.rsi>68) return{score:-1,sigs:['GATE:RSI_OUT_OF_ZONE'],strategy:'MOMENTUM'};
+      // GATE 1: RSI in momentum zone (widened to catch more setups)
+      if(ind.rsi===null||ind.rsi<38||ind.rsi>74) return{score:-1,sigs:['GATE:RSI_OUT_OF_ZONE'],strategy:'MOMENTUM'};
 
-      // GATE 2: Full EMA cascade required (not just EMA9>EMA21)
+      // GATE 2: EMA9 > EMA21 required. EMA21>EMA50 is a bonus (not mandatory)
       if(!ind.ema9||!ind.ema21||!ind.ema50) return{score:-1,sigs:['GATE:NO_EMA'],strategy:'MOMENTUM'};
       if(ind.ema9<=ind.ema21) return{score:-1,sigs:['GATE:EMA9_BELOW_21'],strategy:'MOMENTUM'};
-      if(ind.ema21<=ind.ema50) return{score:-1,sigs:['GATE:EMA21_BELOW_50'],strategy:'MOMENTUM'};
+      // EMA21>EMA50 check is now a scoring bonus below, not a hard gate
 
       // GATE 3: RSI declining = penalty not hard gate
       if(ind.rsiDn){score-=2;sigs.push('RSI_DECLINING⚠');}
@@ -309,12 +313,19 @@ const STRATEGIES = {
       // GATE 4: Low volume = small penalty
       if(ind.volumeRatio<0.8){score-=2;sigs.push('LOW_VOL⚠');}
 
-      // EMA cascade quality
+      // EMA cascade quality — 21>50 is now a bonus, not a gate
       const trend=(ind.ema21-ind.ema50)/ind.ema50*100;
-      if(trend>5){score+=6;sigs.push(`STRONG_TREND(+${trend.toFixed(1)}%)`);}
-      else if(trend>2){score+=4;sigs.push(`TREND(+${trend.toFixed(1)}%)`);}
-      else{score+=2;sigs.push(`WEAK_TREND(+${trend.toFixed(1)}%)`);}
-      score+=2;sigs.push('EMA9>21>50✓');
+      if(ind.ema21>ind.ema50){
+        if(trend>5){score+=6;sigs.push(`STRONG_UPTREND(+${trend.toFixed(1)}%)`);}
+        else if(trend>2){score+=4;sigs.push(`UPTREND(+${trend.toFixed(1)}%)`);}
+        else{score+=2;sigs.push(`WEAK_UPTREND(+${trend.toFixed(1)}%)`);}
+        sigs.push('EMA_CASCADE✓');
+      } else {
+        // EMA21 < EMA50: partial trend — only EMA9>21 confirmed
+        const partialTrend=(ind.ema9-ind.ema21)/ind.ema21*100;
+        score+=2;sigs.push(`EMA9>21(+${partialTrend.toFixed(1)}%)`);
+        if(ind.ema21<ind.ema50){score-=1;sigs.push('EMA21<50⚠');}
+      }
 
       // MACD bonus
       if(ind.macd?.bullish&&ind.macd?.histogram>0){score+=4;sigs.push('MACD_BULL✓');}
@@ -325,6 +336,8 @@ const STRATEGIES = {
       // RSI momentum quality
       if(ind.rsi>=50&&ind.rsi<=63&&ind.rsiUp){score+=4;sigs.push(`RSI_PRIME(${ind.rsi.toFixed(0)})↑`);}
       else if(ind.rsi>=42&&ind.rsi<=68){score+=2;sigs.push(`RSI(${ind.rsi.toFixed(0)})`);}
+      else if(ind.rsi>=38&&ind.rsi<42){score+=1;sigs.push(`RSI_LOW_MOMENTUM(${ind.rsi.toFixed(0)})`);}
+      else if(ind.rsi>68&&ind.rsi<=74){score+=1;sigs.push(`RSI_HIGH(${ind.rsi.toFixed(0)})`);}
 
       // Momentum
       if(ind.mom10!==null&&ind.mom10>3){score+=4;sigs.push(`MOM10(+${ind.mom10.toFixed(1)}%)`);}
