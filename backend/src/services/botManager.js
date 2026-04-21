@@ -180,7 +180,14 @@ async function runBotCycle(botId, userId) {
 
   const ms = getMem(botId, bot);
   const cycleNum = (ms.cycleCount||0)+1;
-  const FEE = getFeeRate(bot.botMode);
+
+  // Load exchange adapter (null = paper mode, no real orders)
+  const adapter = await getAdapter(bot).catch(e => {
+    console.warn(`[BotMgr] Adapter load failed for ${botId.slice(0,6)}:`, e.message);
+    return null;
+  });
+  const exchangeName = adapter?.name || 'paper';
+  const FEE = getFeeRate(bot.botMode, exchangeName);
 
   cyclingBots.add(botId);
   const watchdog = setTimeout(()=>{
@@ -372,7 +379,9 @@ async function runBotCycle(botId, userId) {
 
           if (margin >= 10) {
             const px = prices[best.symbol]?.price;
-            if (px) {
+            if (!px) {
+              ulog(botId, userId, `No price found for ${best.symbol} — skipping buy`, 'ERROR');
+            } else {
               const notional = margin * lev;
               const fee = notional * FEE;  // 0.1% on notional
               const qty = notional / px;
@@ -401,7 +410,7 @@ async function runBotCycle(botId, userId) {
               let actualQty = qty, actualPrice = px, actualFee = fee;
               if (adapter && bot.botMode === 'LIVE') {
                 try {
-                  ulog(botId, userId, `📡 Placing LIVE ${side||'BUY'} order: ${best.symbol} $${margin.toFixed(2)} on ${exchangeName}`, 'SYSTEM');
+                  ulog(botId, userId, `📡 Placing LIVE BUY order: ${best.symbol} $${margin.toFixed(2)} on ${exchangeName}`, 'SYSTEM');
                   const fill = await adapter.placeMarketOrder(best.symbol, 'BUY', margin * lev);
                   if (fill.avgPrice) { actualPrice = fill.avgPrice; actualQty = fill.qty || (margin*lev/fill.avgPrice); }
                   if (fill.fee) { actualFee = fill.fee; }
@@ -429,13 +438,15 @@ async function runBotCycle(botId, userId) {
                   ? `✅ BUY ${qty.toFixed(4)} ${best.symbol} @ $${px.toFixed(2)} | Margin: $${margin.toFixed(2)} | Notional: $${notional.toFixed(2)} | ${lev}x | Fee: $${fee.toFixed(3)} | SL: $${stopPrice.toFixed(2)}`
                   : `✅ BUY ${qty.toFixed(4)} ${best.symbol} @ $${px.toFixed(2)} | $${margin.toFixed(2)} | Fee: $${fee.toFixed(3)} | conf:${best.confidence?.toFixed(1)}/10`,
                 'TRADE');
-            }
+            } // end if(px)
           } else {
             ulog(botId, userId, `Margin $${margin.toFixed(2)} < $10 min — skip`, 'HOLD');
           }
+        } else {
+          ulog(botId, userId, `Gemini rejected trade for ${best?.symbol} — skipping`, 'AI');
         }
       } else {
-        ulog(botId, userId, `No setups met 8/10 threshold for ${bot.strategy}`, 'HOLD');
+        ulog(botId, userId, `No qualifying setups for ${bot.strategy} this cycle`, 'HOLD');
       }
     }
 
